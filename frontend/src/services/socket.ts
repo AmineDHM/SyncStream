@@ -1,116 +1,133 @@
 import { io, Socket } from 'socket.io-client';
-import {
-  RoomState,
-  VideoEvent,
-  CreateRoomResponse,
-  JoinRoomResponse,
-  SyncResponse,
-  User,
-  VideoAction,
-} from '../types';
+import { StreamState, VideoEvent, VideoAction } from '../types';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 class SocketService {
   private socket: Socket | null = null;
 
   connect(): Socket {
-    if (this.socket?.connected) {
+    // If already connected, return existing socket
+    if (this.socket?.connected) return this.socket;
+
+    // If socket exists but disconnected, try to reconnect
+    if (this.socket) {
+      this.socket.connect();
       return this.socket;
     }
 
-    this.socket = io(SOCKET_URL, {
+    this.socket = io(API_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 10000,
     });
 
-    this.socket.on('connect', () => {
-      console.log('Connected to server');
-    });
-
-    this.socket.on('disconnect', (reason) => {
-      console.log('Disconnected:', reason);
-    });
-
-    this.socket.on('connect_error', (error) => {
-      console.error('Connection error:', error);
-    });
+    this.socket.on('connect', () => console.log('Socket connected'));
+    this.socket.on('disconnect', (reason) => console.log('Socket disconnected:', reason));
+    this.socket.on('connect_error', (err) => console.error('Socket connect error:', err.message));
 
     return this.socket;
   }
 
+  // Wait for connection to be ready
+  async waitForConnection(): Promise<Socket> {
+    if (this.socket?.connected) return this.socket;
+    
+    const socket = this.connect();
+    
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Connection timeout')), 10000);
+      
+      if (socket.connected) {
+        clearTimeout(timeout);
+        resolve(socket);
+        return;
+      }
+      
+      socket.once('connect', () => {
+        clearTimeout(timeout);
+        resolve(socket);
+      });
+      
+      socket.once('connect_error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
+    });
+  }
+
   disconnect(): void {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
+    this.socket?.disconnect();
+    this.socket = null;
   }
 
-  // Room operations
-  createRoom(videoUrl: string, userName: string): Promise<CreateRoomResponse> {
-    return new Promise((resolve) => {
-      this.socket?.emit('create-room', { videoUrl, userName }, (response: CreateRoomResponse) => {
+  // Start stream with video
+  setVideo(videoUrl: string): Promise<{ success?: boolean; error?: string; userId?: string; state?: StreamState }> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        reject(new Error('Not connected'));
+        return;
+      }
+      const timeout = setTimeout(() => reject(new Error('Timeout')), 10000);
+      this.socket.emit('set-video', { videoUrl }, (response: { success?: boolean; error?: string; userId?: string; state?: StreamState }) => {
+        clearTimeout(timeout);
         resolve(response);
       });
     });
   }
 
-  joinRoom(roomId: string, userName: string): Promise<JoinRoomResponse> {
-    return new Promise((resolve) => {
-      this.socket?.emit('join-room', { roomId, userName }, (response: JoinRoomResponse) => {
+  // Join stream
+  join(): Promise<{ success?: boolean; error?: string; userId?: string; state?: StreamState }> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        reject(new Error('Not connected'));
+        return;
+      }
+      const timeout = setTimeout(() => reject(new Error('Timeout')), 10000);
+      this.socket.emit('join', {}, (response: { success?: boolean; error?: string; userId?: string; state?: StreamState }) => {
+        clearTimeout(timeout);
         resolve(response);
       });
     });
   }
 
-  leaveRoom(roomId: string, userId: string): void {
-    this.socket?.emit('leave-room', { roomId, userId });
+  // Send video event (anyone can control)
+  sendVideoEvent(action: VideoAction, time: number, duration?: number): void {
+    this.socket?.emit('video-event', { action, time, duration });
   }
 
-  // Video control
-  sendVideoEvent(roomId: string, action: VideoAction, time: number): void {
-    this.socket?.emit('video-event', { roomId, action, time });
-  }
-
-  requestSync(roomId: string): Promise<SyncResponse> {
-    return new Promise((resolve) => {
-      this.socket?.emit('request-sync', { roomId }, (response: SyncResponse) => {
+  // Request sync - get current server state
+  sync(): Promise<{ state: StreamState; serverTime: number }> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) {
+        reject(new Error('Not connected'));
+        return;
+      }
+      const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
+      this.socket.emit('sync', (response: { state: StreamState; serverTime: number }) => {
+        clearTimeout(timeout);
         resolve(response);
       });
     });
+  }
+
+  // Leave stream
+  leave(): void {
+    this.socket?.emit('leave');
   }
 
   // Event listeners
   onVideoEvent(callback: (event: VideoEvent) => void): () => void {
-    const handler = (event: VideoEvent) => callback(event);
-    this.socket?.on('video-event', handler);
-    return () => this.socket?.off('video-event', handler);
+    this.socket?.on('video-event', callback);
+    return () => this.socket?.off('video-event', callback);
   }
 
-  onUserJoined(callback: (data: { user: User; users: User[] }) => void): () => void {
-    const handler = (data: { user: User; users: User[] }) => callback(data);
-    this.socket?.on('user-joined', handler);
-    return () => this.socket?.off('user-joined', handler);
-  }
-
-  onUserLeft(callback: (data: { userId: string; users: User[] }) => void): () => void {
-    const handler = (data: { userId: string; users: User[] }) => callback(data);
-    this.socket?.on('user-left', handler);
-    return () => this.socket?.off('user-left', handler);
-  }
-
-  onHostChanged(callback: (data: { newHostId: string }) => void): () => void {
-    const handler = (data: { newHostId: string }) => callback(data);
-    this.socket?.on('host-changed', handler);
-    return () => this.socket?.off('host-changed', handler);
-  }
-
-  onRoomState(callback: (state: RoomState) => void): () => void {
-    const handler = (state: RoomState) => callback(state);
-    this.socket?.on('room-state', handler);
-    return () => this.socket?.off('room-state', handler);
+  onStreamUpdate(callback: (state: StreamState) => void): () => void {
+    this.socket?.on('stream-update', callback);
+    return () => this.socket?.off('stream-update', callback);
   }
 
   isConnected(): boolean {

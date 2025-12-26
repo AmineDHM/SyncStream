@@ -10,20 +10,15 @@ import {
   SkipForward,
   Loader2,
   RefreshCw,
-  Check,
-  AlertTriangle,
 } from 'lucide-react';
 
 interface VideoPlayerProps {
-  videoRef: React.RefObject<HTMLVideoElement>;
+  setVideoRef: (ref: HTMLVideoElement | null) => void;
   isPlaying: boolean;
   currentTime: number;
   duration: number;
   isBuffering: boolean;
-  isHost: boolean;
   error: string | null;
-  isSynced: boolean;
-  driftMs: number;
   needsInteraction: boolean;
   onPlay: () => void;
   onPause: () => void;
@@ -33,15 +28,12 @@ interface VideoPlayerProps {
 }
 
 export function VideoPlayer({
-  videoRef,
+  setVideoRef,
   isPlaying,
   currentTime,
   duration,
   isBuffering,
-  isHost,
   error,
-  isSynced,
-  driftMs,
   needsInteraction,
   onPlay,
   onPause,
@@ -52,155 +44,182 @@ export function VideoPlayer({
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
 
-  // Initialize volume from video element
+  const videoRefCallback = useCallback((node: HTMLVideoElement | null) => {
+    setVideoElement(node);
+    setVideoRef(node);
+  }, [setVideoRef]);
+
   useEffect(() => {
-    if (videoRef.current) {
-      setVolume(videoRef.current.volume);
-      setIsMuted(videoRef.current.muted);
+    if (videoElement) {
+      setVolume(videoElement.volume);
+      setIsMuted(videoElement.muted);
     }
-  }, [videoRef]);
+  }, [videoElement]);
 
+  // Format time with hours when > 60 min
   const formatTime = useCallback((time: number) => {
-    if (isNaN(time)) return '0:00';
-    const minutes = Math.floor(time / 60);
+    if (isNaN(time) || !isFinite(time)) return '0:00';
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor((time % 3600) / 60);
     const seconds = Math.floor(time % 60);
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }, []);
 
   const handleProgressClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!isHost) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const percent = (e.clientX - rect.left) / rect.width;
       onSeek(percent * duration);
     },
-    [isHost, duration, onSeek]
+    [duration, onSeek]
   );
 
   const handleSkip = useCallback(
     (seconds: number) => {
-      if (!isHost) return;
       onSeek(Math.max(0, Math.min(duration, currentTime + seconds)));
     },
-    [isHost, currentTime, duration, onSeek]
+    [currentTime, duration, onSeek]
   );
 
   const toggleFullscreen = useCallback(() => {
-    const videoContainer = videoRef.current?.parentElement;
-    if (videoContainer) {
+    const container = videoElement?.parentElement;
+    if (container) {
       if (document.fullscreenElement) {
         document.exitFullscreen();
       } else {
-        videoContainer.requestFullscreen();
+        container.requestFullscreen();
       }
     }
-  }, [videoRef]);
+  }, [videoElement]);
 
   const handleVolumeChange = useCallback((newVolume: number) => {
-    if (videoRef.current) {
-      videoRef.current.volume = newVolume;
-      videoRef.current.muted = newVolume === 0;
+    if (videoElement) {
+      videoElement.volume = newVolume;
+      videoElement.muted = newVolume === 0;
       setVolume(newVolume);
       setIsMuted(newVolume === 0);
     }
-  }, [videoRef]);
+  }, [videoElement]);
 
   const toggleMute = useCallback(() => {
-    if (videoRef.current) {
-      const newMuted = !videoRef.current.muted;
-      videoRef.current.muted = newMuted;
+    if (videoElement) {
+      const newMuted = !videoElement.muted;
+      videoElement.muted = newMuted;
       setIsMuted(newMuted);
       if (!newMuted && volume === 0) {
-        videoRef.current.volume = 0.5;
+        videoElement.volume = 0.5;
         setVolume(0.5);
       }
     }
-  }, [videoRef, volume]);
+  }, [videoElement, volume]);
 
-  const handleSyncClick = useCallback(async () => {
-    setIsSyncing(true);
-    await onSync();
-    setTimeout(() => setIsSyncing(false), 500);
-  }, [onSync]);
+  // Keyboard controls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-  const getVolumeIcon = () => {
-    if (isMuted || volume === 0) return VolumeX;
-    if (volume < 0.5) return Volume1;
-    return Volume2;
-  };
+      switch (e.key) {
+        case ' ': // Space - play/pause
+          e.preventDefault();
+          if (isPlaying) onPause();
+          else onPlay();
+          break;
+        case 'ArrowLeft': // Left - backward 10s
+          e.preventDefault();
+          handleSkip(-10);
+          break;
+        case 'ArrowRight': // Right - forward 10s
+          e.preventDefault();
+          handleSkip(10);
+          break;
+        case 'ArrowUp': // Up - volume up
+          e.preventDefault();
+          handleVolumeChange(Math.min(1, volume + 0.1));
+          break;
+        case 'ArrowDown': // Down - volume down
+          e.preventDefault();
+          handleVolumeChange(Math.max(0, volume - 0.1));
+          break;
+        case 'f': // F - fullscreen toggle
+        case 'F':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'm': // M - mute toggle
+        case 'M':
+          e.preventDefault();
+          toggleMute();
+          break;
+        case 's': // S - sync
+        case 'S':
+          e.preventDefault();
+          onSync();
+          break;
+      }
+    };
 
-  const VolumeIcon = getVolumeIcon();
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPlaying, volume, onPlay, onPause, handleSkip, handleVolumeChange, toggleFullscreen, toggleMute, onSync]);
+
+  const VolumeIcon = isMuted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="relative bg-black rounded-2xl overflow-hidden shadow-2xl group">
-      {/* Video element */}
-      <video
-        ref={videoRef}
-        className="w-full aspect-video"
-        playsInline
-      />
+    <div className="relative bg-black rounded-2xl overflow-hidden shadow-2xl group" tabIndex={0}>
+      <video ref={videoRefCallback} className="w-full aspect-video" playsInline />
 
-      {/* Loading overlay */}
+      {/* Buffering */}
       {isBuffering && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
           <Loader2 className="w-12 h-12 text-white animate-spin" />
         </div>
       )}
 
-      {/* Error overlay */}
+      {/* Error */}
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/80">
           <p className="text-red-400 text-lg">{error}</p>
         </div>
       )}
 
-      {/* Click to play overlay - for browser autoplay policy */}
+      {/* Click to play */}
       {needsInteraction && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
-          <button
-            onClick={onEnablePlayback}
-            className="flex flex-col items-center gap-3 text-white hover:scale-105 transition-transform"
-          >
+          <button onClick={onEnablePlayback} className="flex flex-col items-center gap-3 text-white hover:scale-105 transition-transform">
             <div className="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center">
               <Play className="w-10 h-10 ml-1" />
             </div>
             <span className="text-lg font-medium">Click to Play</span>
-            <span className="text-sm text-dark-400">Browser requires interaction to play video</span>
           </button>
         </div>
       )}
 
-      {/* Controls overlay */}
+      {/* Controls */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity">
         {/* Progress bar */}
         <div
-          className={`h-1 bg-dark-600 rounded-full mb-4 ${
-            isHost ? 'cursor-pointer' : 'cursor-default'
-          }`}
+          className="h-1 bg-dark-600 rounded-full mb-4 cursor-pointer"
           onClick={handleProgressClick}
         >
-          <div
-            className="h-full bg-blue-500 rounded-full relative"
-            style={{ width: `${progress}%` }}
-          >
+          <div className="h-full bg-blue-500 rounded-full relative" style={{ width: `${progress}%` }}>
             <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg" />
           </div>
         </div>
 
-        {/* Control buttons */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             {/* Skip back */}
             <button
               onClick={() => handleSkip(-10)}
-              disabled={!isHost}
-              className={`text-white ${
-                isHost ? 'hover:text-blue-400' : 'opacity-50 cursor-not-allowed'
-              } transition-colors`}
-              title={isHost ? 'Skip back 10s' : 'Only host can control'}
+              className="text-white hover:text-blue-400"
             >
               <SkipBack className="w-5 h-5" />
             </button>
@@ -208,51 +227,29 @@ export function VideoPlayer({
             {/* Play/Pause */}
             <button
               onClick={isPlaying ? onPause : onPlay}
-              disabled={!isHost}
-              className={`text-white ${
-                isHost ? 'hover:text-blue-400' : 'opacity-50 cursor-not-allowed'
-              } transition-colors`}
-              title={isHost ? (isPlaying ? 'Pause' : 'Play') : 'Only host can control'}
+              className="text-white hover:text-blue-400"
             >
-              {isPlaying ? (
-                <Pause className="w-8 h-8" />
-              ) : (
-                <Play className="w-8 h-8" />
-              )}
+              {isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8" />}
             </button>
 
             {/* Skip forward */}
             <button
               onClick={() => handleSkip(10)}
-              disabled={!isHost}
-              className={`text-white ${
-                isHost ? 'hover:text-blue-400' : 'opacity-50 cursor-not-allowed'
-              } transition-colors`}
-              title={isHost ? 'Skip forward 10s' : 'Only host can control'}
+              className="text-white hover:text-blue-400"
             >
               <SkipForward className="w-5 h-5" />
             </button>
 
-            {/* Volume control */}
-            <div 
+            {/* Volume */}
+            <div
               className="relative flex items-center"
               onMouseEnter={() => setShowVolumeSlider(true)}
               onMouseLeave={() => setShowVolumeSlider(false)}
             >
-              <button
-                onClick={toggleMute}
-                className="text-white hover:text-blue-400 transition-colors"
-                title={isMuted ? 'Unmute' : 'Mute'}
-              >
+              <button onClick={toggleMute} className="text-white hover:text-blue-400">
                 <VolumeIcon className="w-5 h-5" />
               </button>
-              
-              {/* Volume slider */}
-              <div 
-                className={`ml-2 transition-all duration-200 overflow-hidden ${
-                  showVolumeSlider ? 'w-20 opacity-100' : 'w-0 opacity-0'
-                }`}
-              >
+              <div className={`ml-2 transition-all duration-200 overflow-hidden ${showVolumeSlider ? 'w-20 opacity-100' : 'w-0 opacity-0'}`}>
                 <input
                   type="range"
                   min="0"
@@ -265,68 +262,27 @@ export function VideoPlayer({
               </div>
             </div>
 
-            {/* Time display */}
+            {/* Time */}
             <span className="text-white text-sm">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Sync indicator and button (for non-hosts) */}
-            {!isHost && (
-              <button
-                onClick={handleSyncClick}
-                disabled={isSyncing}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs transition-all ${
-                  isSynced 
-                    ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' 
-                    : 'bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30'
-                }`}
-                title={isSynced ? 'In sync with host' : `Out of sync (${Math.abs(driftMs).toFixed(0)}ms) - Click to sync`}
-              >
-                {isSyncing ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : isSynced ? (
-                  <Check className="w-3.5 h-3.5" />
-                ) : (
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                )}
-                <span>{isSynced ? 'Synced' : 'Sync'}</span>
-              </button>
-            )}
-
-            {/* Host indicator */}
-            {isHost && (
-              <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded-full">
-                Host
-              </span>
-            )}
-
-            {/* Fullscreen */}
+            {/* Sync button */}
             <button
-              onClick={toggleFullscreen}
-              className="text-white hover:text-blue-400 transition-colors"
-              title="Fullscreen"
+              onClick={onSync}
+              className="text-white hover:text-blue-400 flex items-center gap-1"
+              title="Sync with others"
             >
+              <RefreshCw className="w-5 h-5" />
+            </button>
+            <button onClick={toggleFullscreen} className="text-white hover:text-blue-400">
               <Maximize className="w-5 h-5" />
             </button>
           </div>
         </div>
       </div>
-
-      {/* Non-host overlay message */}
-      {!isHost && !isBuffering && !error && (
-        <div className="absolute top-4 left-4 flex items-center gap-2">
-          <span className="text-xs bg-dark-700/80 text-dark-300 px-3 py-1 rounded-full">
-            Only the host can control playback
-          </span>
-          {!isSynced && (
-            <span className="text-xs bg-yellow-600/80 text-white px-3 py-1 rounded-full animate-pulse">
-              Out of sync ({driftMs > 0 ? '+' : ''}{(driftMs / 1000).toFixed(1)}s)
-            </span>
-          )}
-        </div>
-      )}
     </div>
   );
 }

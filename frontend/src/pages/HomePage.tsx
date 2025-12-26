@@ -1,50 +1,70 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Users, Link, Loader2, Tv } from 'lucide-react';
+import { Play, Loader2, Tv, Link2, Users } from 'lucide-react';
 import { socketService } from '../services/socket';
 
 export function HomePage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<'create' | 'join'>('create');
   const [videoUrl, setVideoUrl] = useState('');
-  const [roomId, setRoomId] = useState('');
-  const [userName, setUserName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [hasActiveStream, setHasActiveStream] = useState(false);
+  const [viewerCount, setViewerCount] = useState(0);
 
-  const handleSubmit = async (e: FormEvent) => {
+  useEffect(() => {
+    // Connect and listen for stream updates (real-time)
+    socketService.connect();
+
+    const unsub = socketService.onStreamUpdate((state) => {
+      setHasActiveStream(state.videoUrl !== '');
+      setViewerCount(state.viewerCount);
+    });
+
+    return unsub;
+  }, []);
+
+  const handleStartStream = async (e: FormEvent) => {
     e.preventDefault();
+    if (!videoUrl.trim()) return;
+
     setError('');
     setLoading(true);
 
     try {
-      socketService.connect();
-
-      if (mode === 'create') {
-        const response = await socketService.createRoom(videoUrl, userName);
-        if (response.error) {
-          setError(response.error);
-          return;
-        }
-        if (response.roomId && response.userId) {
-          sessionStorage.setItem('userId', response.userId);
-          sessionStorage.setItem('userName', userName);
-          navigate(`/room/${response.roomId}`);
-        }
-      } else {
-        const response = await socketService.joinRoom(roomId, userName);
-        if (response.error) {
-          setError(response.error);
-          return;
-        }
-        if (response.userId) {
-          sessionStorage.setItem('userId', response.userId);
-          sessionStorage.setItem('userName', userName);
-          navigate(`/room/${roomId}`);
-        }
+      const response = await socketService.setVideo(videoUrl);
+      if (response.error) {
+        setError(response.error);
+        setLoading(false);
+        return;
       }
-    } catch (err) {
-      setError('Failed to connect to server');
+      if (response.userId) {
+        sessionStorage.setItem('userId', response.userId);
+        navigate('/watch');
+      }
+    } catch {
+      setError('Failed to connect');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleJoinStream = async () => {
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await socketService.join();
+      if (response.error) {
+        setError(response.error);
+        setLoading(false);
+        return;
+      }
+      if (response.userId) {
+        sessionStorage.setItem('userId', response.userId);
+        navigate('/watch');
+      }
+    } catch {
+      setError('Failed to connect');
     } finally {
       setLoading(false);
     }
@@ -62,122 +82,70 @@ export function HomePage() {
           <p className="text-dark-400">Watch videos together in real-time</p>
         </div>
 
-        {/* Mode tabs */}
-        <div className="flex gap-2 mb-6">
+        {/* Join active stream button */}
+        {hasActiveStream && (
           <button
-            onClick={() => setMode('create')}
-            className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
-              mode === 'create'
-                ? 'bg-blue-600 text-white'
-                : 'bg-dark-800 text-dark-400 hover:text-white'
-            }`}
+            onClick={handleJoinStream}
+            disabled={loading}
+            className="w-full mb-6 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium py-4 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
           >
-            <Play className="w-4 h-4 inline-block mr-2" />
-            Create Room
+            {loading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <>
+                <Users className="w-5 h-5" />
+                Join Stream ({viewerCount} watching)
+              </>
+            )}
           </button>
-          <button
-            onClick={() => setMode('join')}
-            className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
-              mode === 'join'
-                ? 'bg-blue-600 text-white'
-                : 'bg-dark-800 text-dark-400 hover:text-white'
-            }`}
-          >
-            <Users className="w-4 h-4 inline-block mr-2" />
-            Join Room
-          </button>
-        </div>
+        )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* User name */}
+        {/* Divider */}
+        {hasActiveStream && (
+          <div className="flex items-center gap-4 mb-6">
+            <div className="flex-1 h-px bg-dark-700" />
+            <span className="text-dark-500 text-sm">or start your own</span>
+            <div className="flex-1 h-px bg-dark-700" />
+          </div>
+        )}
+
+        {/* Start stream form */}
+        <form onSubmit={handleStartStream} className="space-y-4">
           <div>
             <label className="block text-dark-400 text-sm mb-2">
-              Your Name
+              <Link2 className="w-4 h-4 inline-block mr-1" />
+              Video URL (M3U8)
             </label>
             <input
-              type="text"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              placeholder="Enter your name"
-              required
-              maxLength={50}
+              type="url"
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              placeholder="https://example.com/video.m3u8"
               className="w-full bg-dark-800 border border-dark-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
 
-          {mode === 'create' ? (
-            /* Video URL */
-            <div>
-              <label className="block text-dark-400 text-sm mb-2">
-                <Link className="w-4 h-4 inline-block mr-1" />
-                M3U8 Video URL
-              </label>
-              <input
-                type="url"
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="https://example.com/video.m3u8"
-                required
-                className="w-full bg-dark-800 border border-dark-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
-              />
-              <p className="text-dark-500 text-xs mt-2">
-                Paste an HLS (.m3u8) video stream URL
-              </p>
-            </div>
-          ) : (
-            /* Room ID */
-            <div>
-              <label className="block text-dark-400 text-sm mb-2">
-                Room ID
-              </label>
-              <input
-                type="text"
-                value={roomId}
-                onChange={(e) => setRoomId(e.target.value)}
-                placeholder="Enter room ID"
-                required
-                className="w-full bg-dark-800 border border-dark-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
-              />
-            </div>
-          )}
-
-          {/* Error message */}
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl px-4 py-3 text-sm">
               {error}
             </div>
           )}
 
-          {/* Submit button */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !videoUrl.trim()}
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                {mode === 'create' ? 'Creating...' : 'Joining...'}
-              </>
-            ) : mode === 'create' ? (
-              <>
-                <Play className="w-5 h-5" />
-                Create Room
-              </>
+              <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <>
-                <Users className="w-5 h-5" />
-                Join Room
+                <Play className="w-5 h-5" />
+                Start Stream
               </>
             )}
           </button>
         </form>
-
-        {/* Footer */}
-        <p className="text-center text-dark-500 text-sm mt-8">
-          Watch synchronized video streams with friends
-        </p>
       </div>
     </div>
   );
