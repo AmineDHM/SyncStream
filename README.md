@@ -1,19 +1,36 @@
 # SyncStream
 
-A real-time synchronized video watching platform. Create rooms, share HLS (m3u8) video streams, and watch together with friends.
+A real-time synchronized video streaming platform. Share HLS (m3u8) video streams and watch together with anyone - no accounts needed.
 
 ![SyncStream](https://img.shields.io/badge/SyncStream-Watch%20Together-blue)
+![Live](https://img.shields.io/badge/Status-Live-green)
+
+**🌐 Live Demo:** [https://syncrostream.netlify.app](https://syncrostream.netlify.app)
 
 ## Features
 
-- 🎬 **Create & Join Rooms** - Share unique room URLs with friends
+- 🎬 **Single Global Stream** - One shared viewing experience for everyone
 - 🔗 **HLS/M3U8 Support** - Stream any HLS video source
-- 🔄 **Real-time Sync** - Synchronized play, pause, and seek
-- 👑 **Host Controls** - Only the host can control playback
-- 🔁 **Auto-sync** - Late joiners automatically sync to current playback
-- 📊 **Drift Correction** - Automatic correction when viewers get out of sync
-- 👥 **Participant List** - See who's watching with you
+- 🔄 **Real-time Sync** - Synchronized play, pause, and seek across all viewers
+- 👥 **Everyone Controls** - Any viewer can control playback
+- 🔁 **Sync Button** - Re-sync with others if you get out of sync
+- ⌨️ **Keyboard Controls** - Full keyboard support for easy control
+- 📊 **Live Viewer Count** - See how many are watching
 - 🌙 **Dark Mode** - Modern dark UI design
+- ⚡ **No Sign-up** - Just paste a link and start watching
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Space` | Play / Pause |
+| `←` Left Arrow | Backward 10 seconds |
+| `→` Right Arrow | Forward 10 seconds |
+| `↑` Up Arrow | Volume up |
+| `↓` Down Arrow | Volume down |
+| `F` | Toggle fullscreen |
+| `M` | Toggle mute |
+| `S` | Sync with others |
 
 ## Tech Stack
 
@@ -32,24 +49,28 @@ A real-time synchronized video watching platform. Create rooms, share HLS (m3u8)
 - TypeScript
 - Zod (validation)
 
+### Deployment
+- **Frontend:** Netlify
+- **Backend:** Render
+
 ## Project Structure
 
 ```
 SyncStream/
 ├── frontend/                 # React frontend
 │   ├── src/
-│   │   ├── components/       # UI components
-│   │   ├── hooks/            # Custom React hooks
-│   │   ├── pages/            # Page components
+│   │   ├── components/       # UI components (VideoPlayer)
+│   │   ├── pages/            # HomePage, WatchPage
 │   │   ├── services/         # Socket service
+│   │   ├── utils/            # Proxy utilities
 │   │   └── types.ts          # TypeScript types
 │   └── ...
 ├── backend/                  # Node.js backend
 │   ├── src/
 │   │   ├── index.ts          # Server entry point
 │   │   ├── socketHandlers.ts # Socket.IO event handlers
-│   │   ├── roomManager.ts    # Room management logic
-│   │   ├── validation.ts     # Zod schemas
+│   │   ├── roomManager.ts    # Stream state management
+│   │   ├── hlsProxy.ts       # CORS proxy for HLS streams
 │   │   └── types.ts          # TypeScript types
 │   └── ...
 └── README.md
@@ -66,6 +87,7 @@ SyncStream/
 
 1. **Clone the repository**
    ```bash
+   git clone https://github.com/AmineDHM/SyncStream.git
    cd SyncStream
    ```
 
@@ -81,55 +103,59 @@ SyncStream/
    npm install
    ```
 
-### Running the Application
+### Running Locally
 
 1. **Start the backend server**
    ```bash
    cd backend
    npm run dev
    ```
-   The server will start on `http://https://9z0r9x5b-5173.euw.devtunnels.ms`
+   Server runs on `http://localhost:3001`
 
 2. **Start the frontend (in a new terminal)**
    ```bash
    cd frontend
    npm run dev
    ```
-   The app will open at `http://https://9z0r9x5b-3001.euw.devtunnels.ms`
+   App opens at `http://localhost:5173`
 
 ### Environment Variables
 
 #### Backend (`backend/.env`)
 ```env
 PORT=3001
-CLIENT_URL=http://https://9z0r9x5b-3001.euw.devtunnels.ms
-REDIS_URL=  # Optional, for scaling
+CLIENT_URL=http://localhost:5173
 ```
 
 #### Frontend (`frontend/.env`)
 ```env
-VITE_SOCKET_URL=http://https://9z0r9x5b-5173.euw.devtunnels.ms
+VITE_API_URL=http://localhost:3001
+```
+
+#### Frontend Production (`frontend/.env.production`)
+```env
+VITE_API_URL=https://syncstream-jvdx.onrender.com
 ```
 
 ## Usage
 
-1. **Create a Room**
-   - Enter your name
+1. **Start a Stream**
    - Paste an M3U8/HLS video URL
-   - Click "Create Room"
+   - Click "Start Stream"
+   - You're now watching!
 
-2. **Share the Room**
-   - Copy the room link using the copy button
-   - Share with friends
+2. **Join a Stream**
+   - If someone is already streaming, you'll see a "Join Stream" button
+   - Click it to join instantly
 
 3. **Watch Together**
-   - The host controls playback
-   - All participants see synchronized video
-   - Automatic sync keeps everyone in sync
+   - Anyone can play, pause, or seek
+   - Use the sync button (or press `S`) if you get out of sync
+   - Use keyboard shortcuts for quick control
 
 ## Test Video URLs
 
-Here are some public HLS test streams you can use:
+Public HLS test streams you can use:
 
 ```
 https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
@@ -143,49 +169,42 @@ https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tear
 
 | Event | Description |
 |-------|-------------|
-| `create-room` | Create a new watch room |
-| `join-room` | Join an existing room |
-| `leave-room` | Leave the current room |
+| `set-video` | Start a new stream with video URL |
+| `join` | Join the active stream |
+| `leave` | Leave the stream |
 | `video-event` | Send play/pause/seek action |
-| `request-sync` | Request current room state |
+| `sync` | Request current stream state |
 
 ### Server → Client
 
 | Event | Description |
 |-------|-------------|
-| `room-state` | Full room state update |
-| `video-event` | Playback action from host |
-| `user-joined` | New user joined |
-| `user-left` | User left the room |
-| `host-changed` | Host has been reassigned |
+| `stream-update` | Stream state update (viewers, URL, etc.) |
+| `video-event` | Playback action from another viewer |
 
-## Synchronization Protocol
+## How Sync Works
 
-1. **Server Authority** - The server maintains the authoritative playback state
-2. **Host Control** - Only the host can emit playback events
-3. **Drift Detection** - Clients check drift every 5 seconds
-4. **Auto-correction** - If drift exceeds 500ms, client seeks to correct position
-
-## Security Features
-
-- M3U8 URL validation
-- Rate limiting on room creation (5 rooms/minute)
-- Maximum 20 users per room
-- Auto-cleanup of inactive rooms (10 minutes)
+1. **Server Authority** - The server maintains the authoritative playback state with timestamps
+2. **Everyone Controls** - Any connected viewer can control playback
+3. **Real-time Broadcast** - Actions are broadcast to all other viewers instantly
+4. **Latency Compensation** - Sync accounts for network latency to keep everyone aligned
+5. **Manual Sync** - Press `S` or click the sync button to re-align with the server state
 
 ## Deployment
 
-### Frontend (Vercel/Netlify)
+### Frontend (Netlify)
 
 ```bash
 cd frontend
 npm run build
-# Deploy the 'dist' folder
+# Deploy the 'dist' folder to Netlify
 ```
 
-### Backend (Railway/Fly.io)
+Build settings:
+- Build command: `npm run build`
+- Publish directory: `dist`
 
-Ensure WebSocket support is enabled.
+### Backend (Render)
 
 ```bash
 cd backend
@@ -193,14 +212,18 @@ npm run build
 npm start
 ```
 
+Build settings:
+- Build command: `npm install --include=dev && npm run build`
+- Start command: `npm start`
+
 ## Future Enhancements
 
 - [ ] Chat functionality
-- [ ] Room passwords
+- [ ] Multiple streams/channels
 - [ ] WebRTC voice chat
 - [ ] Chromecast support
-- [ ] Multiple video quality selection
-- [ ] Admin dashboard
+- [ ] Video quality selection
+- [ ] Stream history
 
 ## License
 
