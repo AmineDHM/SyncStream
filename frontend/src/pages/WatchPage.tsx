@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, Loader2, AlertCircle, Users } from 'lucide-react';
 import { socketService } from '../services/socket';
 import { VideoPlayer } from '../components/VideoPlayer';
-import { StreamState, VideoEvent } from '../types';
+import { StreamState, VideoEvent, ReactionType, ReactionEvent } from '../types';
 import { getProxiedUrl, needsProxy } from '../utils/proxy';
 import Hls from 'hls.js';
 
@@ -21,7 +21,10 @@ export function WatchPage() {
   const [isBuffering, setIsBuffering] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [needsInteraction, setNeedsInteraction] = useState(false);
-  
+
+  // Reactions state
+  const [reactions, setReactions] = useState<ReactionEvent[]>([]);
+
   // Flag to prevent feedback loops when handling remote events
   const isHandlingRemoteEvent = useRef(false);
   // HLS instance ref for cleanup
@@ -68,14 +71,14 @@ export function WatchPage() {
 
     const unsubVideo = socketService.onVideoEvent((event: VideoEvent) => {
       if (!videoRef) return;
-      
+
       // Set flag to prevent feedback loop
       isHandlingRemoteEvent.current = true;
-      
+
       // Update time display immediately
       setCurrentTime(event.time);
       setDuration(event.duration);
-      
+
       if (event.action === 'play') {
         videoRef.currentTime = event.time;
         videoRef.play().catch(() => setNeedsInteraction(true));
@@ -87,16 +90,27 @@ export function WatchPage() {
       } else if (event.action === 'seek') {
         videoRef.currentTime = event.time;
       }
-      
+
       // Reset flag after a short delay to allow DOM events to fire
       setTimeout(() => {
         isHandlingRemoteEvent.current = false;
       }, 100);
     });
 
+    // Listen for reactions from other viewers
+    const unsubReaction = socketService.onReaction((reaction: ReactionEvent) => {
+      setReactions((prev) => [...prev, reaction]);
+
+      // Remove reaction after animation completes (3.5 seconds to match longest animation)
+      setTimeout(() => {
+        setReactions((prev) => prev.filter((r) => r.id !== reaction.id));
+      }, 3500);
+    });
+
     return () => {
       unsubUpdate();
       unsubVideo();
+      unsubReaction();
     };
   }, [videoRef, navigate]);
 
@@ -114,32 +128,32 @@ export function WatchPage() {
     let initialSyncDone = false;
 
     if (Hls.isSupported()) {
-      const hls = new Hls({ 
-        enableWorker: true, 
+      const hls = new Hls({
+        enableWorker: true,
         lowLatencyMode: false,
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
         startLevel: -1, // Auto quality
       });
       hlsRef.current = hls;
-      
+
       hls.loadSource(sourceUrl);
       hls.attachMedia(videoRef);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if (initialSyncDone) return;
         initialSyncDone = true;
-        
+
         // Sync with server state on initial load
         socketService.sync()
           .then(({ state, serverTime }) => {
             if (!videoRef) return;
             isHandlingRemoteEvent.current = true;
-            
+
             // Account for network latency
             const latency = (Date.now() - serverTime) / 1000;
             const syncTime = state.isPlaying ? state.currentTime + latency : state.currentTime;
-            
+
             if (syncTime > 0) {
               videoRef.currentTime = syncTime;
             }
@@ -271,11 +285,11 @@ export function WatchPage() {
         // Account for network latency
         const latency = (Date.now() - serverTime) / 1000;
         const syncTime = state.isPlaying ? state.currentTime + latency : state.currentTime;
-        
+
         videoRef.currentTime = syncTime;
         setCurrentTime(syncTime);
         setDuration(state.duration);
-        
+
         if (state.isPlaying) {
           videoRef.play().catch(() => setNeedsInteraction(true));
           setIsPlaying(true);
@@ -283,7 +297,7 @@ export function WatchPage() {
           videoRef.pause();
           setIsPlaying(false);
         }
-        
+
         // Reset flag after a short delay
         setTimeout(() => { isHandlingRemoteEvent.current = false; }, 500);
       } else {
@@ -295,8 +309,13 @@ export function WatchPage() {
   }, [videoRef]);
 
   const handleEnablePlayback = useCallback(() => {
-    videoRef?.play().then(() => setNeedsInteraction(false)).catch(() => {});
+    videoRef?.play().then(() => setNeedsInteraction(false)).catch(() => { });
   }, [videoRef]);
+
+  // Handle reaction - send to all viewers
+  const handleReaction = useCallback((type: ReactionType) => {
+    socketService.sendReaction(type);
+  }, []);
 
   if (loading) {
     return (
@@ -355,6 +374,8 @@ export function WatchPage() {
             onSeek={handleSeek}
             onSync={handleSync}
             onEnablePlayback={handleEnablePlayback}
+            onReaction={handleReaction}
+            reactions={reactions}
           />
         </div>
       </main>

@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { StreamState, VideoEvent, VideoAction } from '../types';
+import { StreamState, VideoEvent, VideoAction, ReactionType, ReactionEvent } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -35,23 +35,23 @@ class SocketService {
   // Wait for connection to be ready
   async waitForConnection(): Promise<Socket> {
     if (this.socket?.connected) return this.socket;
-    
+
     const socket = this.connect();
-    
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('Connection timeout')), 10000);
-      
+
       if (socket.connected) {
         clearTimeout(timeout);
         resolve(socket);
         return;
       }
-      
+
       socket.once('connect', () => {
         clearTimeout(timeout);
         resolve(socket);
       });
-      
+
       socket.once('connect_error', (err) => {
         clearTimeout(timeout);
         reject(err);
@@ -99,6 +99,11 @@ class SocketService {
     this.socket?.emit('video-event', { action, time, duration });
   }
 
+  // Send reaction emoji
+  sendReaction(type: ReactionType): void {
+    this.socket?.emit('reaction', { type });
+  }
+
   // Request sync - get current server state
   sync(): Promise<{ state: StreamState; serverTime: number }> {
     return new Promise((resolve, reject) => {
@@ -130,9 +135,15 @@ class SocketService {
     return () => this.socket?.off('stream-update', callback);
   }
 
+  onReaction(callback: (event: ReactionEvent) => void): () => void {
+    this.socket?.on('reaction', callback);
+    return () => this.socket?.off('reaction', callback);
+  }
+
   isConnected(): boolean {
     return this.socket?.connected ?? false;
   }
 }
 
 export const socketService = new SocketService();
+

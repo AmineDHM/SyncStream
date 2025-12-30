@@ -1,7 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 import { streamManager } from './roomManager';
-import { User, VideoEvent } from './types';
+import { User, VideoEvent, ReactionEvent, ReactionType } from './types';
 import { z } from 'zod';
 
 const STREAM_ROOM = 'stream';
@@ -18,6 +18,10 @@ const videoEventSchema = z.object({
   duration: z.number().min(0).optional(),
 });
 
+const reactionSchema = z.object({
+  type: z.enum(['heart_eyes', 'sparkle_heart', 'cry', 'grr']),
+});
+
 export function setupSocketHandlers(io: Server): void {
   // Broadcast state to ALL connected clients (including those not in stream room)
   const broadcastState = () => {
@@ -26,7 +30,7 @@ export function setupSocketHandlers(io: Server): void {
 
   io.on('connection', (socket: Socket) => {
     console.log(`Connected: ${socket.id}`);
-    
+
     // Send current state immediately on connect
     socket.emit('stream-update', streamManager.toDTO());
 
@@ -57,7 +61,7 @@ export function setupSocketHandlers(io: Server): void {
     socket.on('join', (data, callback) => {
       try {
         joinSchema.parse(data);
-        
+
         if (!streamManager.hasActiveStream()) {
           callback({ error: 'No active stream' });
           return;
@@ -102,6 +106,27 @@ export function setupSocketHandlers(io: Server): void {
       }
     });
 
+    // Reaction events - broadcast emoji reactions to all viewers
+    socket.on('reaction', (data) => {
+      try {
+        const { type } = reactionSchema.parse(data);
+        const user = streamManager.getUserBySocketId(socket.id);
+        if (!user) return;
+
+        const reactionEvent: ReactionEvent = {
+          type: type as ReactionType,
+          userId: user.id,
+          id: uuidv4(),
+        };
+
+        // Broadcast to ALL in stream room (including sender for immediate feedback)
+        io.to(STREAM_ROOM).emit('reaction', reactionEvent);
+        console.log(`Reaction: ${type} from user ${user.id.substring(0, 8)}`);
+      } catch (error) {
+        console.error('Reaction event error:', error);
+      }
+    });
+
     // Sync request - returns current server state
     socket.on('sync', (callback) => {
       callback({ state: streamManager.toDTO(), serverTime: Date.now() });
@@ -129,3 +154,4 @@ function handleLeave(socket: Socket, broadcastState: () => void): void {
   broadcastState();
   console.log(`User left (${streamManager.toDTO().viewerCount} remaining)`);
 }
+

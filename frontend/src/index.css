@@ -8,7 +8,9 @@
   padding: 0;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
 }
 
@@ -46,16 +48,22 @@ video {
 
 /* Animations */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { 
+  from {
     opacity: 0;
     transform: translateY(10px);
   }
-  to { 
+
+  to {
     opacity: 1;
     transform: translateY(0);
   }
@@ -67,4 +75,152 @@ video {
 
 .animate-slideUp {
   animation: slideUp 0.3s ease-out;
+}
+
+/* Float up animation for emoji reactions - smooth version */
+@keyframes floatUp1 {
+  0% {
+    opacity: 0;
+    transform: translateY(0) translateX(0) scale(0.5);
+  }
+
+  10% {
+    opacity: 1;
+    transform: translateY(-20px) translateX(-5px) scale(1);
+  }
+
+  30% {
+    transform: translateY(-80px) translateX(8px) scale(1.1);
+  }
+
+  50% {
+    transform: translateY(-150px) translateX(-6px) scale(1.15);
+  }
+
+  70% {
+    opacity: 0.8;
+    transform: translateY(-220px) translateX(4px) scale(1.1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-320px) translateX(-3px) scale(0.9);
+  }
+}
+
+@keyframes floatUp2 {
+  0% {
+    opacity: 0;
+    transform: translateY(0) translateX(0) scale(0.5);
+  }
+
+  10% {
+    opacity: 1;
+    transform: translateY(-25px) translateX(6px) scale(1);
+  }
+
+  30% {
+    transform: translateY(-90px) translateX(-10px) scale(1.05);
+  }
+
+  50% {
+    transform: translateY(-160px) translateX(8px) scale(1.2);
+  }
+
+  70% {
+    opacity: 0.8;
+    transform: translateY(-230px) translateX(-5px) scale(1.1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-340px) translateX(6px) scale(0.85);
+  }
+}
+
+@keyframes floatUp3 {
+  0% {
+    opacity: 0;
+    transform: translateY(0) translateX(0) scale(0.5);
+  }
+
+  10% {
+    opacity: 1;
+    transform: translateY(-18px) translateX(-8px) scale(1);
+  }
+
+  30% {
+    transform: translateY(-70px) translateX(12px) scale(1.15);
+  }
+
+  50% {
+    transform: translateY(-140px) translateX(-10px) scale(1.1);
+  }
+
+  70% {
+    opacity: 0.8;
+    transform: translateY(-210px) translateX(7px) scale(1.05);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-300px) translateX(-4px) scale(0.9);
+  }
+}
+
+/* GPU acceleration and smooth rendering */
+.reaction-emoji {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.animate-float-1 {
+  animation: floatUp1 3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.animate-float-2 {
+  animation: floatUp2 3.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.animate-float-3 {
+  animation: floatUp3 2.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* Small bounce animation for reaction button hover */
+@keyframes bounceSmall {
+
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  40% {
+    transform: translateY(-6px) scale(1.1);
+  }
+
+  60% {
+    transform: translateY(-3px) scale(1.05);
+  }
+}
+
+.animate-bounce-small {
+  animation: bounceSmall 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Pulse glow effect for reaction buttons */
+@keyframes pulseGlow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0);
+  }
+
+  50% {
+    box-shadow: 0 0 20px 5px rgba(139, 92, 246, 0.3);
+  }
+}
+
+.reaction-btn:active {
+  animation: pulseGlow 0.3s ease-out;
 }

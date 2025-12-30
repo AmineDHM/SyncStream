@@ -21,3 +21,11 @@ export interface VideoEvent {
   duration: number;
   serverTime: number;
 }
+
+export type ReactionType = 'heart_eyes' | 'sparkle_heart' | 'cry' | 'grr';
+
+export interface ReactionEvent {
+  type: ReactionType;
+  userId: string;
+  id: string;
+}
