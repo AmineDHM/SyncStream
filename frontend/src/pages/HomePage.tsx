@@ -1,22 +1,24 @@
-import { useState, FormEvent, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Play, Loader2, Tv, Link2, Users } from 'lucide-react';
-import { socketService } from '../services/socket';
+import { useState, FormEvent, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Play, Loader2, Tv, Link2, Users, Film } from "lucide-react";
+import { socketService } from "../services/socket";
 
 export function HomePage() {
   const navigate = useNavigate();
-  const [videoUrl, setVideoUrl] = useState('');
+  const [videoUrl, setVideoUrl] = useState("");
+  const [movieName, setMovieName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [hasActiveStream, setHasActiveStream] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
+  const [inputMode, setInputMode] = useState<"url" | "movie">("movie");
 
   useEffect(() => {
     // Connect and listen for stream updates (real-time)
     socketService.connect();
 
     const unsub = socketService.onStreamUpdate((state) => {
-      setHasActiveStream(state.videoUrl !== '');
+      setHasActiveStream(state.videoUrl !== "");
       setViewerCount(state.viewerCount);
     });
 
@@ -25,31 +27,61 @@ export function HomePage() {
 
   const handleStartStream = async (e: FormEvent) => {
     e.preventDefault();
-    if (!videoUrl.trim()) return;
 
-    setError('');
+    const input = inputMode === "url" ? videoUrl : movieName;
+    if (!input.trim()) return;
+
+    setError("");
     setLoading(true);
 
     try {
-      const response = await socketService.setVideo(videoUrl);
+      let finalUrl = videoUrl;
+
+      // If movie name mode, fetch m3u8 URL first
+      if (inputMode === "movie") {
+        const searchResponse = await fetch(
+          `${
+            import.meta.env.VITE_API_URL || "http://localhost:3000"
+          }/api/search-movie`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ movieName }),
+          }
+        );
+
+        const data = await searchResponse.json();
+
+        if (!searchResponse.ok || !data.success) {
+          setError(data.error || "Movie not found");
+          setLoading(false);
+          return;
+        }
+
+        finalUrl = data.m3u8Url;
+      }
+
+      const response = await socketService.setVideo(finalUrl);
       if (response.error) {
         setError(response.error);
         setLoading(false);
         return;
       }
       if (response.userId) {
-        sessionStorage.setItem('userId', response.userId);
-        navigate('/watch');
+        sessionStorage.setItem("userId", response.userId);
+        navigate("/watch");
       }
-    } catch {
-      setError('Failed to connect');
+    } catch (err) {
+      setError("Failed to connect");
     } finally {
       setLoading(false);
     }
   };
 
   const handleJoinStream = async () => {
-    setError('');
+    setError("");
     setLoading(true);
 
     try {
@@ -60,11 +92,11 @@ export function HomePage() {
         return;
       }
       if (response.userId) {
-        sessionStorage.setItem('userId', response.userId);
-        navigate('/watch');
+        sessionStorage.setItem("userId", response.userId);
+        navigate("/watch");
       }
     } catch {
-      setError('Failed to connect');
+      setError("Failed to connect");
     } finally {
       setLoading(false);
     }
@@ -111,18 +143,65 @@ export function HomePage() {
 
         {/* Start stream form */}
         <form onSubmit={handleStartStream} className="space-y-4">
-          <div>
-            <label className="block text-dark-400 text-sm mb-2">
+          {/* Toggle input mode */}
+          <div className="flex gap-2 p-1 bg-dark-800 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setInputMode("movie")}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                inputMode === "movie"
+                  ? "bg-blue-600 text-white"
+                  : "text-dark-400 hover:text-white"
+              }`}
+            >
+              <Film className="w-4 h-4 inline-block mr-1" />
+              Movie Name
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputMode("url")}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                inputMode === "url"
+                  ? "bg-blue-600 text-white"
+                  : "text-dark-400 hover:text-white"
+              }`}
+            >
               <Link2 className="w-4 h-4 inline-block mr-1" />
-              Video URL (M3U8)
-            </label>
-            <input
-              type="url"
-              value={videoUrl}
-              onChange={(e) => setVideoUrl(e.target.value)}
-              placeholder="https://example.com/video.m3u8"
-              className="w-full bg-dark-800 border border-dark-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
-            />
+              Direct URL
+            </button>
+          </div>
+
+          {/* Input field */}
+          <div>
+            {inputMode === "url" ? (
+              <>
+                <label className="block text-dark-400 text-sm mb-2">
+                  <Link2 className="w-4 h-4 inline-block mr-1" />
+                  Video URL (M3U8)
+                </label>
+                <input
+                  type="url"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="Type or paste the .m3u8 video URL..."
+                  className="w-full bg-dark-800 border border-dark-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </>
+            ) : (
+              <>
+                <label className="block text-dark-400 text-sm mb-2">
+                  <Film className="w-4 h-4 inline-block mr-1" />
+                  Movie Name
+                </label>
+                <input
+                  type="text"
+                  value={movieName}
+                  onChange={(e) => setMovieName(e.target.value)}
+                  placeholder="Type the movie name..."
+                  className="w-full bg-dark-800 border border-dark-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </>
+            )}
           </div>
 
           {error && (
@@ -133,11 +212,17 @@ export function HomePage() {
 
           <button
             type="submit"
-            disabled={loading || !videoUrl.trim()}
+            disabled={
+              loading ||
+              (inputMode === "url" ? !videoUrl.trim() : !movieName.trim())
+            }
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                {inputMode === "movie" ? "Searching..." : "Starting..."}
+              </>
             ) : (
               <>
                 <Play className="w-5 h-5" />

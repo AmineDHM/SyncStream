@@ -5,6 +5,7 @@ import cors from 'cors';
 import { setupSocketHandlers } from './socketHandlers';
 import { hlsProxyRouter } from './hlsProxy';
 import { config } from './config';
+import { extractM3U8FromMovie } from './movieScraper';
 
 const app = express();
 const httpServer = createServer(app);
@@ -55,6 +56,28 @@ app.get('/', (_req, res) => {
 
 // HLS Proxy routes
 app.use('/proxy', hlsProxyRouter);
+
+// Movie search endpoint
+app.post('/api/search-movie', async (req, res) => {
+  try {
+    const { movieName } = req.body;
+    
+    if (!movieName || typeof movieName !== 'string') {
+      return res.status(400).json({ error: 'Movie name is required' });
+    }
+
+    const result = await extractM3U8FromMovie(movieName);
+    
+    if (result.success && result.m3u8Url) {
+      return res.json({ success: true, m3u8Url: result.m3u8Url });
+    } else {
+      return res.status(404).json({ success: false, error: result.error || 'Movie not found' });
+    }
+  } catch (error) {
+    console.error('Movie search error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Socket.IO setup
 const io = new Server(httpServer, {
