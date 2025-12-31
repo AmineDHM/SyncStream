@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "SyncStream - Auto Stream",
+  "version": "1.0.0",
+  "description": "Automatically stream movies from FaselHD to SyncStream",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.faselhds.biz/*",
+    "https://faselhds.biz/*",
+    "https://*.faselhdstream.com/*",
+    "https://*.faselhd.club/*",
+    "https://*/",
+    "http://*/"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.faselhds.biz/*",
+        "https://faselhds.biz/*",
+        "https://*.faselhdstream.com/*",
+        "https://*.faselhd.club/*"
+      ],
+      "js": ["automator.js"]
+    },
+    {
+      "matches": [
+        "https://syncrostream.netlify.app/*",
+        "http://localhost:5173/*"
+      ],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": ["detector.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}

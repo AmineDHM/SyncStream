@@ -6,8 +6,6 @@ import cors from 'cors';
 import { setupSocketHandlers } from './socketHandlers';
 import { hlsProxyRouter } from './hlsProxy';
 import { config } from './config';
-import { extractM3U8FromMovie } from './movieScraper';
-import { getFlareSolverr } from './flareSolverr';
 
 const app = express();
 const httpServer = createServer(app);
@@ -39,26 +37,13 @@ app.use(cors({
 
 app.use(express.json());
 
-// Health check endpoint (required for Render)
-app.get('/health', async (_req, res) => {
-  try {
-    const solver = getFlareSolverr();
-    const flaresolverrHealthy = await solver.healthCheck();
-    
-    res.json({ 
-      status: flaresolverrHealthy ? 'healthy' : 'degraded',
-      timestamp: new Date().toISOString(),
-      env: config.nodeEnv,
-      services: {
-        flaresolverr: flaresolverrHealthy
-      }
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'unhealthy',
-      error: 'Service check failed'
-    });
-  }
+// Health check endpoint
+app.get('/health', (_req, res) => {
+  res.json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    env: config.nodeEnv,
+  });
 });
 
 app.get('/', (_req, res) => {
@@ -71,30 +56,6 @@ app.get('/', (_req, res) => {
 
 // HLS Proxy routes
 app.use('/proxy', hlsProxyRouter);
-
-// Movie search endpoint
-app.post('/api/search-movie', async (req, res) => {
-  try {
-    const { movieName } = req.body;
-    
-    if (!movieName || typeof movieName !== 'string') {
-      return res.status(400).json({ error: 'Movie name is required' });
-    }
-
-    console.log(`[API] Searching for movie: ${movieName}`);
-    const result = await extractM3U8FromMovie(movieName);
-    console.log(`[API] Search result:`, { success: result.success, hasUrl: !!result.m3u8Url, error: result.error });
-    
-    if (result.success && result.m3u8Url) {
-      return res.json({ success: true, m3u8Url: result.m3u8Url, title: result.title });
-    } else {
-      return res.status(404).json({ success: false, error: result.error || 'Movie not found' });
-    }
-  } catch (error) {
-    console.error('Movie search error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
 // Socket.IO setup
 const io = new Server(httpServer, {

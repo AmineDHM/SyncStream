@@ -1,10 +1,11 @@
 import { useState, FormEvent, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Play, Loader2, Tv, Link2, Users, Film } from "lucide-react";
 import { socketService } from "../services/socket";
 
 export function HomePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [videoUrl, setVideoUrl] = useState("");
   const [movieName, setMovieName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -12,8 +13,45 @@ export function HomePage() {
   const [hasActiveStream, setHasActiveStream] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
   const [inputMode, setInputMode] = useState<"url" | "movie">("movie");
+  const [searchingWithExtension, setSearchingWithExtension] = useState(false);
 
   useEffect(() => {
+    // Check for videoUrl in URL params (from browser extension)
+    const urlParam = searchParams.get("videoUrl");
+    if (urlParam) {
+      setVideoUrl(urlParam);
+      setInputMode("url");
+    }
+
+    // Listen for messages from browser extension (search results)
+    const handleExtensionMessage = (event: MessageEvent) => {
+      if (event.data.type === "SYNCSTREAM_M3U8_FOUND") {
+        const { m3u8Url } = event.data;
+        setVideoUrl(m3u8Url);
+        setSearchingWithExtension(false);
+        setInputMode("url");
+
+        // Auto-start streaming immediately
+        socketService
+          .setVideo(m3u8Url)
+          .then((response) => {
+            if (response.error) {
+              setError(response.error);
+              setLoading(false);
+            } else if (response.userId) {
+              sessionStorage.setItem("userId", response.userId);
+              navigate("/watch");
+            }
+          })
+          .catch(() => {
+            setError("Failed to connect");
+            setLoading(false);
+          });
+      }
+    };
+
+    window.addEventListener("message", handleExtensionMessage);
+
     // Connect and listen for stream updates (real-time)
     socketService.connect();
 
@@ -22,8 +60,11 @@ export function HomePage() {
       setViewerCount(state.viewerCount);
     });
 
-    return unsub;
-  }, []);
+    return () => {
+      window.removeEventListener("message", handleExtensionMessage);
+      unsub();
+    };
+  }, [searchParams]);
 
   const handleStartStream = async (e: FormEvent) => {
     e.preventDefault();
@@ -35,50 +76,50 @@ export function HomePage() {
     setLoading(true);
 
     try {
-      let finalUrl = videoUrl;
-      let title: string | undefined;
-
-      // If movie name mode, fetch m3u8 URL first
+      // If in movie mode, trigger extension search
       if (inputMode === "movie") {
-        const searchResponse = await fetch(
-          `${
-            import.meta.env.VITE_API_URL || "http://localhost:3000"
-          }/api/search-movie`,
+        setSearchingWithExtension(true);
+
+        // Send message to extension
+        window.postMessage(
           {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ movieName }),
-          }
+            type: "SYNCSTREAM_SEARCH_MOVIE",
+            movieName: movieName,
+          },
+          "*"
         );
 
-        const data = await searchResponse.json();
+        // Timeout after 2 minutes
+        setTimeout(() => {
+          if (searchingWithExtension) {
+            setSearchingWithExtension(false);
+            setLoading(false);
+            setError("Search timed out. Extension may not be loaded.");
+          }
+        }, 120000);
+        return;
+      }
 
-        if (!searchResponse.ok || !data.success) {
-          setError(data.error || "Movie not found");
+      // If in URL mode, use the provided URL directly
+      let finalUrl = videoUrl;
+      if (inputMode === "url" && finalUrl.trim()) {
+        const response = await socketService.setVideo(finalUrl);
+        if (response.error) {
+          setError(response.error);
           setLoading(false);
           return;
         }
-
-        finalUrl = data.m3u8Url;
-        title = data.title;
-      }
-
-      const response = await socketService.setVideo(finalUrl, title);
-      if (response.error) {
-        setError(response.error);
-        setLoading(false);
-        return;
-      }
-      if (response.userId) {
-        sessionStorage.setItem("userId", response.userId);
-        navigate("/watch");
+        if (response.userId) {
+          sessionStorage.setItem("userId", response.userId);
+          navigate("/watch");
+        }
       }
     } catch (err) {
       setError("Failed to connect");
     } finally {
-      setLoading(false);
+      if (inputMode === "url") {
+        setLoading(false);
+      }
     }
   };
 
@@ -175,21 +216,7 @@ export function HomePage() {
 
           {/* Input field */}
           <div>
-            {inputMode === "url" ? (
-              <>
-                <label className="block text-dark-400 text-sm mb-2">
-                  <Link2 className="w-4 h-4 inline-block mr-1" />
-                  Video URL (M3U8)
-                </label>
-                <input
-                  type="url"
-                  value={videoUrl}
-                  onChange={(e) => setVideoUrl(e.target.value)}
-                  placeholder="Type or paste the .m3u8 video URL..."
-                  className="w-full bg-dark-800 border border-dark-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              </>
-            ) : (
+            {inputMode === "movie" ? (
               <>
                 <label className="block text-dark-400 text-sm mb-2">
                   <Film className="w-4 h-4 inline-block mr-1" />
@@ -200,6 +227,21 @@ export function HomePage() {
                   value={movieName}
                   onChange={(e) => setMovieName(e.target.value)}
                   placeholder="Type the movie name..."
+                  disabled={searchingWithExtension}
+                  className="w-full bg-dark-800 border border-dark-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50"
+                />
+              </>
+            ) : (
+              <>
+                <label className="block text-dark-400 text-sm mb-2">
+                  <Link2 className="w-4 h-4 inline-block mr-1" />
+                  Video URL (M3U8)
+                </label>
+                <input
+                  type="url"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="Type or paste the .m3u8 video URL..."
                   className="w-full bg-dark-800 border border-dark-700 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
                 />
               </>
@@ -216,19 +258,20 @@ export function HomePage() {
             type="submit"
             disabled={
               loading ||
+              searchingWithExtension ||
               (inputMode === "url" ? !videoUrl.trim() : !movieName.trim())
             }
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-3 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {loading ? (
+            {loading || searchingWithExtension ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                {inputMode === "movie" ? "Searching..." : "Starting..."}
+                {searchingWithExtension ? "Finding movie..." : "Starting..."}
               </>
             ) : (
               <>
                 <Play className="w-5 h-5" />
-                Start Stream
+                {inputMode === "movie" ? "Search & Stream" : "Start Stream"}
               </>
             )}
           </button>

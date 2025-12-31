@@ -2,6 +2,8 @@
 
 A real-time synchronized video streaming platform. Share HLS (m3u8) video streams and watch together with anyone - no accounts needed.
 
+Extract m3u8 URLs directly from video websites using our Chrome extension, then stream synchronized playback across all viewers.
+
 ![SyncStream](https://img.shields.io/badge/SyncStream-Watch%20Together-blue)
 ![Live](https://img.shields.io/badge/Status-Live-green)
 
@@ -18,6 +20,7 @@ A real-time synchronized video streaming platform. Share HLS (m3u8) video stream
 - 📊 **Live Viewer Count** - See how many are watching
 - 🌙 **Dark Mode** - Modern dark UI design
 - ⚡ **No Sign-up** - Just paste a link and start watching
+- 🔧 **Browser Extension** - Extract m3u8 URLs directly from video websites with one click
 
 ## Keyboard Shortcuts
 
@@ -46,19 +49,43 @@ A real-time synchronized video streaming platform. Share HLS (m3u8) video stream
 - Node.js 18+
 - Express + Socket.IO
 - TypeScript
-- **FlareSolverr** (Cloudflare bypass - 95%+ success rate)
-- Cheerio (HTML parsing)
+- CORS proxy for HLS stream delivery
 
-## 🚀 Quick Deploy
+## 🚀 Browser Extension Setup
 
-### Deploy to Render (Free)
+The SyncStream Browser Extension makes it easy to extract m3u8 URLs from video websites and open them directly in SyncStream.
 
-See [DEPLOY.md](./DEPLOY.md) for 5-minute deployment guide.
+### Installation
 
-**TL;DR:**
-1. Deploy FlareSolverr Docker image
-2. Deploy backend with `FLARESOLVERR_URL` env var
-3. Done!
+1. **Navigate to the extension folder:**
+   ```bash
+   cd browser-extension
+   ```
+
+2. **Load in Chrome:**
+   - Open `chrome://extensions/`
+   - Enable "Developer mode" (top right)
+   - Click "Load unpacked"
+   - Select the `browser-extension` folder
+   - Done! The extension is now installed
+
+### How to Use
+
+1. Visit any website with video content (Netflix, YouTube, etc.)
+2. The SyncStream floating button will appear on pages with video streams
+3. Click the button to extract the m3u8 URL
+4. Choose to:
+   - **Copy to clipboard** - Copy the URL and paste it into SyncStream
+   - **Open in SyncStream** - Opens SyncStream directly with the video URL
+5. Start syncing with friends!
+
+### Configuration
+
+The extension can be configured to point to a custom SyncStream instance:
+- Right-click the extension icon
+- Click "Options"
+- Set your custom SyncStream base URL
+- Save
 
 ### Deployment
 - **Frontend:** Netlify
@@ -83,6 +110,11 @@ SyncStream/
 │   │   ├── roomManager.ts    # Stream state management
 │   │   ├── hlsProxy.ts       # CORS proxy for HLS streams
 │   │   └── types.ts          # TypeScript types
+│   └── ...
+├── browser-extension/        # Chrome extension for URL extraction
+│   ├── manifest.json         # Extension configuration
+│   ├── content.js            # Script injected into video websites
+│   ├── popup.html/js         # Extension popup UI
 │   └── ...
 └── README.md
 ```
@@ -150,16 +182,23 @@ VITE_API_URL=https://syncstream-jvdx.onrender.com
 
 ## Usage
 
-1. **Start a Stream**
-   - Paste an M3U8/HLS video URL
-   - Click "Start Stream"
-   - You're now watching!
+1. **Install the Browser Extension** (Recommended)
+   - Load the `browser-extension` folder as an unpacked extension in Chrome
+   - Visit a video website with HLS streams
+   - Click the SyncStream button to extract the m3u8 URL
+   - Choose to open in SyncStream or copy to clipboard
 
-2. **Join a Stream**
+2. **Manual Method - Paste M3U8 URL**
+   - Get an m3u8 URL (from your video website, browser DevTools, or extension)
+   - Go to [SyncStream](https://syncrostream.netlify.app)
+   - Paste the URL in the "Video URL" field
+   - Click "Start Stream"
+
+3. **Join a Stream**
    - If someone is already streaming, you'll see a "Join Stream" button
    - Click it to join instantly
 
-3. **Watch Together**
+4. **Watch Together**
    - Anyone can play, pause, or seek
    - Use the sync button (or press `S`) if you get out of sync
    - Use keyboard shortcuts for quick control
