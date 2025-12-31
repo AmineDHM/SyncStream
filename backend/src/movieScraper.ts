@@ -27,7 +27,11 @@ export async function extractM3U8FromMovie(
     // Use @sparticuz/chromium for serverless environments, puppeteer for local
     if (isProduction) {
       browser = await puppeteerCore.launch({
-        args: chromium.args,
+        args: [
+          ...chromium.args,
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process',
+        ],
         defaultViewport: chromium.defaultViewport,
         executablePath: await chromium.executablePath(),
         headless: chromium.headless,
@@ -61,12 +65,21 @@ export async function extractM3U8FromMovie(
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     });
 
-    await page.goto("https://www.faselhds.biz/", {
-      waitUntil: "networkidle2",
-      timeout: 30000,
-    });
+    console.log('[MovieScraper] Navigating to faselhds.biz...');
+    
+    try {
+      await page.goto("https://www.faselhds.biz/", {
+        waitUntil: "domcontentloaded", // Changed from networkidle2
+        timeout: 60000, // Increased timeout to 60 seconds
+      });
+      console.log('[MovieScraper] Page loaded successfully');
+    } catch (error) {
+      console.error('[MovieScraper] Navigation error:', error);
+      throw new Error('Failed to load website - possible Cloudflare block');
+    }
 
-    await sleep(5000);
+    // Wait longer for Cloudflare challenge
+    await sleep(10000);
 
     const searchResponse = await page.evaluate(
       async (searchQuery: string) => {
@@ -111,11 +124,11 @@ export async function extractM3U8FromMovie(
     }
 
     await page.goto(linkHref, {
-      waitUntil: "networkidle2",
-      timeout: 30000,
+      waitUntil: "domcontentloaded",
+      timeout: 60000,
     });
 
-    await sleep(3000);
+    await sleep(5000);
 
     // Extract movie title
     // @ts-ignore
