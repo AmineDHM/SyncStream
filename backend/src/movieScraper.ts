@@ -91,10 +91,15 @@ export async function extractM3U8FromMovie(
       movieName
     );
 
+    console.log('[MovieScraper] Search response length:', searchResponse.length);
+    console.log('[MovieScraper] Search response preview:', searchResponse.substring(0, 200));
+
+    // Parse HTML to extract link - simpler approach
     const linkHref = await page.evaluate((html: string) => {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
-      const firstLink = doc.querySelector("a");
+      // Create a temporary div to parse HTML
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      const firstLink = div.querySelector("a");
       return firstLink ? firstLink.href : null;
     }, searchResponse);
 
