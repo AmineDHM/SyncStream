@@ -3,7 +3,6 @@ import puppeteerCore from "puppeteer-core";
 import puppeteerVanilla from "puppeteer";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import AnonimizeUAPlugin from "puppeteer-extra-plugin-anonymize-ua";
 import chromium from "@sparticuz/chromium";
 
 // Add stealth plugin with custom evasions
@@ -13,7 +12,6 @@ stealthPlugin.enabledEvasions.delete("chrome.runtime");
 stealthPlugin.enabledEvasions.delete("navigator.plugins");
 
 puppeteer.use(stealthPlugin);
-puppeteer.use(AnonimizeUAPlugin());
 
 interface ScraperResult {
   success: boolean;
