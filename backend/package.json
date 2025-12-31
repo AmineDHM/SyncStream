@@ -20,15 +20,11 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@sparticuz/chromium": "^130.0.0",
     "axios": "^1.13.2",
     "cheerio": "^1.1.2",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "express": "^4.18.2",
-    "puppeteer": "^24.34.0",
-    "puppeteer-core": "^23.9.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "socket.io": "^4.7.2",
     "uuid": "^9.0.1",
     "zod": "^3.22.4"

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -6,6 +7,7 @@ import { setupSocketHandlers } from './socketHandlers';
 import { hlsProxyRouter } from './hlsProxy';
 import { config } from './config';
 import { extractM3U8FromMovie } from './movieScraper';
+import { getFlareSolverr } from './flareSolverr';
 
 const app = express();
 const httpServer = createServer(app);
@@ -38,12 +40,25 @@ app.use(cors({
 app.use(express.json());
 
 // Health check endpoint (required for Render)
-app.get('/health', (_req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    env: config.nodeEnv,
-  });
+app.get('/health', async (_req, res) => {
+  try {
+    const solver = getFlareSolverr();
+    const flaresolverrHealthy = await solver.healthCheck();
+    
+    res.json({ 
+      status: flaresolverrHealthy ? 'healthy' : 'degraded',
+      timestamp: new Date().toISOString(),
+      env: config.nodeEnv,
+      services: {
+        flaresolverr: flaresolverrHealthy
+      }
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      error: 'Service check failed'
+    });
+  }
 });
 
 app.get('/', (_req, res) => {

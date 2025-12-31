@@ -1,0 +1,31 @@
+services:
+  # FlareSolverr - Cloudflare Bypass Service
+  - type: web
+    name: flaresolverr
+    env: docker
+    dockerfilePath: ./Dockerfile.flaresolverr
+    healthCheckPath: /v1
+    envVars:
+      - key: LOG_LEVEL
+        value: info
+      - key: LOG_HTML
+        value: false
+      - key: CAPTCHA_SOLVER
+        value: none
+    plan: starter
+
+  # Backend API
+  - type: web
+    name: syncstream-backend
+    env: node
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: FLARESOLVERR_URL
+        value: https://flaresolverr.onrender.com/v1
+    plan: starter

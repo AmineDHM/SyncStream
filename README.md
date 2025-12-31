@@ -43,11 +43,22 @@ A real-time synchronized video streaming platform. Share HLS (m3u8) video stream
 - Lucide Icons
 
 ### Backend
-- Node.js 20+
-- Express
-- Socket.IO
+- Node.js 18+
+- Express + Socket.IO
 - TypeScript
-- Zod (validation)
+- **FlareSolverr** (Cloudflare bypass - 95%+ success rate)
+- Cheerio (HTML parsing)
+
+## 🚀 Quick Deploy
+
+### Deploy to Render (Free)
+
+See [DEPLOY.md](./DEPLOY.md) for 5-minute deployment guide.
+
+**TL;DR:**
+1. Deploy FlareSolverr Docker image
+2. Deploy backend with `FLARESOLVERR_URL` env var
+3. Done!
 
 ### Deployment
 - **Frontend:** Netlify
