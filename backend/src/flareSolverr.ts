@@ -2,54 +2,73 @@ import axios from 'axios';
 
 interface FlareSolverrResponse {
   solution: {
-    url: string;
-    status: number;
-    cookies: any[];
-    userAgent: string;
     response: string;
   };
   status: string;
   message: string;
+  session?: string;
 }
 
 export class FlareSolverrClient {
   private apiUrl: string;
-  private maxTimeout: number;
+  private session: string | null = null;
 
   constructor() {
     this.apiUrl = process.env.FLARESOLVERR_URL || 'http://localhost:8191/v1';
-    this.maxTimeout = 60000;
   }
 
-  async fetchWithBypass(url: string): Promise<string> {
-    console.log(`[FlareSolverr] Fetching: ${url}`);
+  async createSession(): Promise<void> {
+    const { data } = await axios.post<FlareSolverrResponse>(
+      this.apiUrl,
+      { cmd: 'sessions.create' },
+      { timeout: 10000 }
+    );
+    
+    if (data.status === 'ok' && data.session) {
+      this.session = data.session;
+    }
+  }
 
+  async destroySession(): Promise<void> {
+    if (!this.session) return;
+    
     try {
-      const response = await axios.post<FlareSolverrResponse>(
-        this.apiUrl,
-        {
-          cmd: 'request.get',
-          url: url,
-          maxTimeout: this.maxTimeout
-        },
-        {
-          timeout: this.maxTimeout + 5000,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
+      await axios.post(this.apiUrl, {
+        cmd: 'sessions.destroy',
+        session: this.session
+      }, { timeout: 5000 });
+      this.session = null;
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+  }
 
-      if (response.data.status === 'ok' && response.data.solution) {
-        console.log(`[FlareSolverr] ✅ Success (${response.data.solution.response.length} bytes)`);
-        return response.data.solution.response;
+  async fetchPage(url: string): Promise<string> {
+    try {
+      const requestBody: any = {
+        cmd: 'request.get',
+        url,
+        maxTimeout: 60000
+      };
+
+      if (this.session) {
+        requestBody.session = this.session;
       }
 
-      throw new Error(`FlareSolverr failed: ${response.data.message}`);
+      const { data } = await axios.post<FlareSolverrResponse>(
+        this.apiUrl,
+        requestBody,
+        { timeout: 65000 }
+      );
+
+      if (data.status !== 'ok') {
+        throw new Error(`FlareSolverr failed: ${data.message}`);
+      }
+
+      return data.solution.response;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.code === 'ECONNREFUSED') {
-          throw new Error('FlareSolverr not running. Start with: docker run -d -p 8191:8191 ghcr.io/flaresolverr/flaresolverr:latest');
-        }
-        throw new Error(`FlareSolverr error: ${error.message}`);
+      if (axios.isAxiosError(error) && error.code === 'ECONNREFUSED') {
+        throw new Error('FlareSolverr not running');
       }
       throw error;
     }
@@ -57,8 +76,8 @@ export class FlareSolverrClient {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await axios.get(`${this.apiUrl}`, { timeout: 5000 });
-      return response.data?.status === 'ok';
+      const { data } = await axios.get(`${this.apiUrl}`, { timeout: 5000 });
+      return data?.status === 'ok';
     } catch {
       return false;
     }

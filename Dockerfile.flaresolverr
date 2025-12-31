@@ -3,5 +3,8 @@ FROM ghcr.io/flaresolverr/flaresolverr:latest
 ENV LOG_LEVEL=info
 ENV LOG_HTML=false
 ENV CAPTCHA_SOLVER=none
+ENV PORT=8191
 
 EXPOSE 8191
+
+CMD ["python", "-u", "/app/src/flaresolverr.py"]
