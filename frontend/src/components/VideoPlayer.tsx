@@ -80,6 +80,8 @@ export function VideoPlayer({
   const [isMuted, setIsMuted] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+  const [showControls, setShowControls] = useState(false);
+  const hideControlsTimeoutRef = useRef<number | null>(null);
 
   // Timeline hover state
   const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -145,11 +147,33 @@ export function VideoPlayer({
 
   const toggleFullscreen = useCallback(() => {
     const container = videoElement?.parentElement;
-    if (container) {
-      if (document.fullscreenElement) {
+    if (!container) return;
+
+    // Check if already in fullscreen
+    const isFullscreen = document.fullscreenElement || 
+                        (document as any).webkitFullscreenElement || 
+                        (document as any).mozFullScreenElement;
+
+    if (isFullscreen) {
+      // Exit fullscreen
+      if (document.exitFullscreen) {
         document.exitFullscreen();
-      } else {
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      } else if ((document as any).mozCancelFullScreen) {
+        (document as any).mozCancelFullScreen();
+      }
+    } else {
+      // Enter fullscreen - try multiple methods for compatibility
+      if (container.requestFullscreen) {
         container.requestFullscreen();
+      } else if ((container as any).webkitRequestFullscreen) {
+        (container as any).webkitRequestFullscreen();
+      } else if ((container as any).mozRequestFullScreen) {
+        (container as any).mozRequestFullScreen();
+      } else if ((container as any).webkitEnterFullscreen) {
+        // For iOS Safari
+        (container as any).webkitEnterFullscreen();
       }
     }
   }, [videoElement]);
@@ -225,23 +249,55 @@ export function VideoPlayer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isPlaying, volume, onPlay, onPause, handleSkip, handleVolumeChange, toggleFullscreen, toggleMute, onSync]);
 
+  // Show/hide controls with timeout for touch devices
+  const handleUserInteraction = useCallback(() => {
+    setShowControls(true);
+    if (hideControlsTimeoutRef.current) {
+      clearTimeout(hideControlsTimeoutRef.current);
+    }
+    hideControlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hideControlsTimeoutRef.current) {
+        clearTimeout(hideControlsTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const VolumeIcon = isMuted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="relative">
+    <div className="w-full flex flex-col max-h-full">
       {/* Video Container */}
-      <div className="relative bg-black rounded-2xl overflow-hidden shadow-2xl group" tabIndex={0}>
+      <div 
+        className="relative bg-black rounded-lg sm:rounded-2xl overflow-hidden shadow-2xl group flex-shrink-0" 
+        tabIndex={0}
+        onTouchStart={handleUserInteraction}
+        onMouseMove={handleUserInteraction}
+        onClick={(e) => {
+          // Toggle play/pause on video click (mobile-friendly)
+          if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'VIDEO') {
+            if (isPlaying) onPause();
+            else onPlay();
+          }
+        }}
+      >
         <video ref={videoRefCallback} className="w-full aspect-video" playsInline />
 
-        {/* Floating Reactions */}
+        {/* Floating Reactions - Inside fullscreen container */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           {reactions.map((reaction) => {
             const style = getReactionStyle(reaction.id);
             return (
               <div
                 key={reaction.id}
-                className={`absolute bottom-24 reaction-emoji ${style.animClass}`}
+                className={`absolute bottom-20 reaction-emoji ${style.animClass}`}
                 style={{ left: style.left }}
               >
                 <span className="text-5xl drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
@@ -279,11 +335,11 @@ export function VideoPlayer({
         )}
 
         {/* Controls */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-2 sm:p-4 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
           {/* Progress bar with timestamp tooltip */}
           <div
             ref={progressBarRef}
-            className="relative h-1 bg-dark-600 rounded-full mb-4 cursor-pointer group/progress"
+            className="relative h-1.5 sm:h-1 bg-dark-600 rounded-full mb-2 sm:mb-4 cursor-pointer group/progress touch-manipulation"
             onClick={handleProgressClick}
             onMouseMove={handleProgressHover}
             onMouseLeave={handleProgressLeave}
@@ -312,35 +368,35 @@ export function VideoPlayer({
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-4">
               {/* Skip back */}
               <button
                 onClick={() => handleSkip(-10)}
-                className="text-white hover:text-blue-400"
+                className="text-white hover:text-blue-400 p-1 sm:p-0 touch-manipulation"
               >
-                <SkipBack className="w-5 h-5" />
+                <SkipBack className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
 
               {/* Play/Pause */}
               <button
                 onClick={isPlaying ? onPause : onPlay}
-                className="text-white hover:text-blue-400"
+                className="text-white hover:text-blue-400 p-1 sm:p-0 touch-manipulation"
               >
-                {isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8" />}
+                {isPlaying ? <Pause className="w-6 h-6 sm:w-8 sm:h-8" /> : <Play className="w-6 h-6 sm:w-8 sm:h-8" />}
               </button>
 
               {/* Skip forward */}
               <button
                 onClick={() => handleSkip(10)}
-                className="text-white hover:text-blue-400"
+                className="text-white hover:text-blue-400 p-1 sm:p-0 touch-manipulation"
               >
-                <SkipForward className="w-5 h-5" />
+                <SkipForward className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
 
-              {/* Volume */}
+              {/* Volume - Hidden on small screens */}
               <div
-                className="relative flex items-center"
+                className="relative flex items-center hidden sm:flex"
                 onMouseEnter={() => setShowVolumeSlider(true)}
                 onMouseLeave={() => setShowVolumeSlider(false)}
               >
@@ -361,22 +417,22 @@ export function VideoPlayer({
               </div>
 
               {/* Time */}
-              <span className="text-white text-sm">
+              <span className="text-white text-xs sm:text-sm whitespace-nowrap">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </span>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {/* Sync button */}
               <button
                 onClick={onSync}
-                className="text-white hover:text-blue-400 flex items-center gap-1"
+                className="text-white hover:text-blue-400 flex items-center gap-1 p-1 sm:p-0 touch-manipulation"
                 title="Sync with others"
               >
-                <RefreshCw className="w-5 h-5" />
+                <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
-              <button onClick={toggleFullscreen} className="text-white hover:text-blue-400">
-                <Maximize className="w-5 h-5" />
+              <button onClick={toggleFullscreen} className="text-white hover:text-blue-400 p-1 sm:p-0 touch-manipulation">
+                <Maximize className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
           </div>
@@ -385,15 +441,15 @@ export function VideoPlayer({
 
       {/* Reaction Buttons - Below the video */}
       {onReaction && (
-        <div className="flex justify-center gap-4 mt-4">
+        <div className="flex justify-center gap-2 sm:gap-4 mt-2 sm:mt-4 flex-shrink-0">
           {(Object.keys(REACTION_EMOJIS) as ReactionType[]).map((type) => (
             <button
               key={type}
               onClick={() => onReaction(type)}
-              className="reaction-btn group/reaction relative bg-dark-800 hover:bg-dark-700 border border-dark-600 hover:border-purple-500/50 rounded-full p-3.5 transition-all duration-300 ease-out hover:scale-110 active:scale-95"
+              className="reaction-btn group/reaction relative bg-dark-800 hover:bg-dark-700 border border-dark-600 hover:border-purple-500/50 rounded-full p-2 sm:p-3.5 transition-all duration-300 ease-out hover:scale-110 active:scale-95 touch-manipulation"
               title={`React with ${type.replace('_', ' ')}`}
             >
-              <span className="text-2xl block group-hover/reaction:animate-bounce-small">
+              <span className="text-xl sm:text-2xl block group-hover/reaction:animate-bounce-small">
                 {REACTION_EMOJIS[type]}
               </span>
               {/* Glow effect on hover */}
