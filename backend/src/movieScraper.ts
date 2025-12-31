@@ -80,6 +80,9 @@ export async function extractM3U8FromMovie(
       }`
     );
 
+    // Use cookie from environment variable or parameter
+    const cloudfareCookie = process.env.CLOUDFLARE_COOKIE;
+
     if (isProduction) {
       // Simplified production config - removed problematic flags
       browser = await puppeteerCore.launch({
@@ -159,6 +162,29 @@ export async function extractM3U8FromMovie(
       "Accept-Encoding": "gzip, deflate, br",
     });
 
+    // Set cookies if provided (THIS IS THE KEY PART!)
+    if (cloudfareCookie) {
+      console.log("[MovieScraper] Using provided Cloudflare cookies");
+
+      // Parse cookie string and set cookies
+      const cookies = cloudfareCookie
+        .split(";")
+        .map((cookie) => {
+          const [name, ...valueParts] = cookie.trim().split("=");
+          const value = valueParts.join("=");
+          return {
+            name: name.trim(),
+            value: value.trim(),
+            domain: ".faselhds.biz",
+            path: "/",
+          };
+        })
+        .filter((cookie) => cookie.name && cookie.value);
+
+      await page.setCookie(...cookies);
+      console.log("[MovieScraper] Cookies set:", cookies.length);
+    }
+
     console.log("[MovieScraper] Navigating to faselhds.biz...");
 
     try {
@@ -172,19 +198,34 @@ export async function extractM3U8FromMovie(
       throw new Error("Failed to load website");
     }
 
-    // Human-like behavior
-    await performHumanLikeBehavior(page);
+    // If cookies are set, skip Cloudflare check, otherwise do the check
+    if (!cloudfareCookie) {
+      // Human-like behavior
+      await performHumanLikeBehavior(page);
 
-    // Wait for Cloudflare
-    console.log("[MovieScraper] Waiting for Cloudflare challenge...");
-    const bypassed = await waitForCloudflareBypass(page, 3);
+      // Wait for Cloudflare
+      console.log("[MovieScraper] Waiting for Cloudflare challenge...");
+      const bypassed = await waitForCloudflareBypass(page, 3);
 
-    if (!bypassed) {
-      console.error("[MovieScraper] Failed to bypass Cloudflare");
-      throw new Error("Cloudflare protection blocking access");
+      if (!bypassed) {
+        console.error("[MovieScraper] Failed to bypass Cloudflare");
+        throw new Error("Cloudflare protection blocking access");
+      }
+
+      console.log("[MovieScraper] Successfully bypassed Cloudflare");
+    } else {
+      console.log("[MovieScraper] Skipping Cloudflare check (using cookies)");
+      // Quick check to see if we're actually past Cloudflare
+      const isCloudflare = await page.evaluate(() => {
+        return document.title.toLowerCase().includes("just a moment");
+      });
+
+      if (isCloudflare) {
+        console.error("[MovieScraper] Cookies invalid or expired");
+        throw new Error("Cloudflare cookies are invalid or expired");
+      }
     }
 
-    console.log("[MovieScraper] Successfully bypassed Cloudflare");
     await sleep(2000);
 
     // Search
