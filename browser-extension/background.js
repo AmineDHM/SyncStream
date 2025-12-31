@@ -175,42 +175,22 @@ async function handleM3U8Extracted(m3u8Url, tabId, searchId) {
     });
   }
 
-  // Build the URL to open in SyncStream with the video URL
-  const syncStreamUrl = `${search.baseUrl}?videoUrl=${encodeURIComponent(
-    m3u8Url
-  )}`;
-
-  console.log(`[SyncStream] Opening SyncStream with URL: ${syncStreamUrl}`);
-
-  // Navigate the origin tab to SyncStream
+  // Send m3u8 URL to the page via bridge (app will handle streaming)
+  console.log(`[SyncStream] Sending m3u8 to app: ${m3u8Url}`);
+  
   try {
-    // First send the m3u8 URL back to the page via the bridge
-    await chrome.tabs
-      .sendMessage(search.originTabId, {
-        type: "SYNCSTREAM_M3U8_FOUND",
-        m3u8Url: m3u8Url,
-      })
-      .catch(() => {
-        console.log(
-          "[SyncStream] Failed to send message to origin tab (may be in different context)"
-        );
-      });
-
-    // Then navigate to show the player
-    await chrome.tabs.update(search.originTabId, { url: syncStreamUrl });
-    console.log("[SyncStream] Successfully navigated origin tab");
+    await chrome.tabs.sendMessage(search.originTabId, {
+      type: "SYNCSTREAM_M3U8_FOUND",
+      m3u8Url: m3u8Url,
+    });
+    console.log("[SyncStream] Message sent successfully");
   } catch (err) {
-    console.log(
-      "[SyncStream] Failed to update origin tab, trying new window:",
-      err
-    );
-    // If origin tab is closed, open in a new window
-    try {
-      await chrome.windows.create({ url: syncStreamUrl });
-      console.log("[SyncStream] Successfully opened new window");
-    } catch (windowErr) {
-      console.error("[SyncStream] Failed to create window:", windowErr);
-    }
+    console.log("[SyncStream] Failed to send message, using URL fallback:", err);
+    // Fallback: navigate with URL param
+    const syncStreamUrl = `${search.baseUrl}?videoUrl=${encodeURIComponent(m3u8Url)}`;
+    await chrome.tabs.update(search.originTabId, { url: syncStreamUrl }).catch(() => {
+      chrome.windows.create({ url: syncStreamUrl });
+    });
   }
 
   // Remove from active searches
