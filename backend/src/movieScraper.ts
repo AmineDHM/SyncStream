@@ -35,12 +35,17 @@ export async function extractM3U8FromMovie(
       browser = await puppeteer.launch({
         args: [
           ...chromium.args,
-          '--disable-web-security',
-          '--disable-features=IsolateOrigins,site-per-process',
+          '--disable-blink-features=AutomationControlled',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
         ],
-        defaultViewport: chromium.defaultViewport,
+        defaultViewport: { width: 1920, height: 1080 },
         executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
+        headless: 'new', // Use new headless mode (harder to detect)
+        ignoreHTTPSErrors: true,
       });
     } else {
       // For local development with stealth mode
@@ -50,7 +55,7 @@ export async function extractM3U8FromMovie(
         "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
       
       browser = await puppeteer.launch({
-        headless: true,
+        headless: 'new',
         executablePath,
         args: [
           "--no-sandbox",
@@ -64,13 +69,46 @@ export async function extractM3U8FromMovie(
     console.log('[MovieScraper] Browser launched successfully');
     const page = await browser.newPage();
 
+    // Additional stealth: override webdriver flag and other detection methods
+    await page.evaluateOnNewDocument(() => {
+      // Remove webdriver flag
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => false,
+      });
+      
+      // Override chrome property
+      (window as any).chrome = {
+        runtime: {},
+      };
+      
+      // Override permissions
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters: any) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: 'denied' } as PermissionStatus) :
+          originalQuery(parameters)
+      );
+      
+      // Override plugins to mimic real browser
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
+    });
+
+    // Set realistic viewport
+    await page.setViewport({ width: 1920, height: 1080 });
+
     await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     );
 
     await page.setExtraHTTPHeaders({
-      "Accept-Language": "en-US,en;q=0.9",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Encoding": "gzip, deflate, br",
+      "DNT": "1",
+      "Connection": "keep-alive",
+      "Upgrade-Insecure-Requests": "1",
     });
 
     console.log('[MovieScraper] Navigating to faselhds.biz...');
@@ -88,6 +126,16 @@ export async function extractM3U8FromMovie(
 
     // Wait for Cloudflare challenge to complete
     console.log('[MovieScraper] Waiting for Cloudflare challenge...');
+    
+    // Simulate mouse movement to appear more human-like
+    try {
+      await page.mouse.move(100 + Math.random() * 200, 100 + Math.random() * 200);
+      await sleep(2000);
+      await page.mouse.move(300 + Math.random() * 200, 300 + Math.random() * 200);
+    } catch (error) {
+      console.log('[MovieScraper] Mouse movement skipped');
+    }
+    
     await sleep(15000); // Initial wait
     
     // Check if still on Cloudflare challenge page
@@ -99,7 +147,7 @@ export async function extractM3U8FromMovie(
     
     if (isCloudflare) {
       console.log('[MovieScraper] Still on Cloudflare page, waiting much longer...');
-      await sleep(20000); // Wait another 20 seconds (total 35s)
+      await sleep(25000); // Wait another 25 seconds (total 40s)
       
       // Check again
       const stillCloudflare = await page.evaluate(() => {
@@ -107,8 +155,17 @@ export async function extractM3U8FromMovie(
       });
       
       if (stillCloudflare) {
-        console.error('[MovieScraper] Cloudflare challenge did not complete');
-        throw new Error('Cloudflare protection blocking access');
+        console.log('[MovieScraper] Still blocked, one more attempt...');
+        await sleep(15000); // Final wait
+        
+        const finalCheck = await page.evaluate(() => {
+          return document.title.includes('Just a moment');
+        });
+        
+        if (finalCheck) {
+          console.error('[MovieScraper] Cloudflare challenge did not complete after 55s');
+          throw new Error('Cloudflare protection blocking access');
+        }
       }
     }
     
