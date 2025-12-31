@@ -1,82 +1,49 @@
 import axios from 'axios';
 
-interface FlareSolverrResponse {
-  solution: {
-    response: string;
-  };
-  status: string;
-  message: string;
-  session?: string;
-}
-
-export class FlareSolverrClient {
-  private apiUrl: string;
-  private session: string | null = null;
+/**
+ * Scraper Client - Calls external scraper service (deployed on Replit)
+ * The scraper service runs Puppeteer to bypass Cloudflare
+ */
+export class ScraperClient {
+  private scraperUrl: string;
 
   constructor() {
-    this.apiUrl = process.env.FLARESOLVERR_URL || 'http://localhost:8191/v1';
+    // Set your Replit scraper URL here or via env variable
+    this.scraperUrl = process.env.SCRAPER_URL || 'http://localhost:3000';
   }
 
-  async createSession(): Promise<void> {
-    const { data } = await axios.post<FlareSolverrResponse>(
-      this.apiUrl,
-      { cmd: 'sessions.create' },
-      { timeout: 10000 }
-    );
-    
-    if (data.status === 'ok' && data.session) {
-      this.session = data.session;
-    }
-  }
-
-  async destroySession(): Promise<void> {
-    if (!this.session) return;
-    
+  async scrapeMovie(movieName: string): Promise<{ success: boolean; m3u8Url?: string; title?: string; error?: string }> {
     try {
-      await axios.post(this.apiUrl, {
-        cmd: 'sessions.destroy',
-        session: this.session
-      }, { timeout: 5000 });
-      this.session = null;
-    } catch (error) {
-      // Ignore cleanup errors
-    }
-  }
-
-  async fetchPage(url: string): Promise<string> {
-    try {
-      const requestBody: any = {
-        cmd: 'request.get',
-        url,
-        maxTimeout: 60000
-      };
-
-      if (this.session) {
-        requestBody.session = this.session;
-      }
-
-      const { data } = await axios.post<FlareSolverrResponse>(
-        this.apiUrl,
-        requestBody,
-        { timeout: 65000 }
+      console.log(`[Scraper] Calling scraper service for: ${movieName}`);
+      
+      const { data } = await axios.post(
+        `${this.scraperUrl}/scrape`,
+        { movieName },
+        { timeout: 120000 } // 2 min timeout for full scrape
       );
 
-      if (data.status !== 'ok') {
-        throw new Error(`FlareSolverr failed: ${data.message}`);
+      if (data.success) {
+        console.log(`[Scraper] ✅ Got m3u8 for: ${data.title}`);
+        return {
+          success: true,
+          m3u8Url: data.m3u8Url,
+          title: data.title,
+        };
       }
 
-      return data.solution.response;
+      return { success: false, error: data.error || 'Unknown error' };
     } catch (error) {
-      if (axios.isAxiosError(error) && error.code === 'ECONNREFUSED') {
-        throw new Error('FlareSolverr not running');
-      }
-      throw error;
+      const msg = axios.isAxiosError(error) 
+        ? error.response?.data?.error || error.message
+        : 'Unknown error';
+      console.error(`[Scraper] ❌ ${msg}`);
+      return { success: false, error: msg };
     }
   }
 
   async healthCheck(): Promise<boolean> {
     try {
-      const { data } = await axios.get(`${this.apiUrl}`, { timeout: 5000 });
+      const { data } = await axios.get(this.scraperUrl, { timeout: 5000 });
       return data?.status === 'ok';
     } catch {
       return false;
@@ -84,11 +51,16 @@ export class FlareSolverrClient {
   }
 }
 
-let instance: FlareSolverrClient | null = null;
+let instance: ScraperClient | null = null;
 
-export function getFlareSolverr(): FlareSolverrClient {
+export function getScraperClient(): ScraperClient {
   if (!instance) {
-    instance = new FlareSolverrClient();
+    instance = new ScraperClient();
   }
   return instance;
 }
+
+// Backward compatibility
+export { ScraperClient as StealthClient, ScraperClient as FlareSolverrClient };
+export const getStealthBrowser = getScraperClient;
+export const getFlareSolverr = getScraperClient;

@@ -1,21 +1,4 @@
 services:
-  # FlareSolverr - Cloudflare Bypass Service
-  - type: web
-    name: syncstream-flaresolverr
-    env: docker
-    dockerfilePath: ./Dockerfile.flaresolverr
-    healthCheckPath: /v1
-    envVars:
-      - key: LOG_LEVEL
-        value: info
-      - key: LOG_HTML
-        value: false
-      - key: CAPTCHA_SOLVER
-        value: none
-      - key: PORT
-        value: 8191
-    plan: starter
-
   # Backend API
   - type: web
     name: syncstream-backend
@@ -28,6 +11,9 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: SCRAPER_URL
+        sync: false
+    plan: starter
       - key: FLARESOLVERR_URL
         fromService:
           name: syncstream-flaresolverr
