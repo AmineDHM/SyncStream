@@ -1,7 +1,12 @@
 // @ts-nocheck
 import puppeteerCore from "puppeteer-core";
-import puppeteer from "puppeteer";
+import puppeteerVanilla from "puppeteer";
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import chromium from "@sparticuz/chromium";
+
+// Add stealth plugin
+puppeteer.use(StealthPlugin());
 
 interface ScraperResult {
   success: boolean;
@@ -37,10 +42,11 @@ export async function extractM3U8FromMovie(
         headless: chromium.headless,
       });
     } else {
-      // For local development, try to find Chrome/Chromium
+      // For local development with stealth mode
       const executablePath = 
         process.env.PUPPETEER_EXECUTABLE_PATH ||
-        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"; // Default Windows path
+        puppeteerVanilla.executablePath() ||
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
       
       browser = await puppeteer.launch({
         headless: true,
@@ -49,6 +55,7 @@ export async function extractM3U8FromMovie(
           "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-blink-features=AutomationControlled",
+          "--disable-web-security",
         ],
       });
     }
