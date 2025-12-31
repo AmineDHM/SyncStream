@@ -29,9 +29,10 @@ export async function extractM3U8FromMovie(
     console.log(`[MovieScraper] Starting search for: ${movieName}`);
     console.log(`[MovieScraper] Environment: ${isProduction ? 'production' : 'development'}`);
 
-    // Use @sparticuz/chromium for serverless environments, puppeteer for local
+    // Use puppeteer-extra with stealth for both environments
     if (isProduction) {
-      browser = await puppeteerCore.launch({
+      // For production with @sparticuz/chromium executable
+      browser = await puppeteer.launch({
         args: [
           ...chromium.args,
           '--disable-web-security',
@@ -87,17 +88,28 @@ export async function extractM3U8FromMovie(
 
     // Wait for Cloudflare challenge to complete
     console.log('[MovieScraper] Waiting for Cloudflare challenge...');
-    await sleep(10000);
+    await sleep(15000); // Initial wait
     
     // Check if still on Cloudflare challenge page
     const isCloudflare = await page.evaluate(() => {
       return document.title.includes('Just a moment') || 
-             document.body.innerText.includes('Checking your browser');
+             document.body.innerText.includes('Checking your browser') ||
+             document.body.innerText.includes('Cloudflare');
     });
     
     if (isCloudflare) {
-      console.log('[MovieScraper] Still on Cloudflare page, waiting longer...');
-      await sleep(15000); // Wait another 15 seconds
+      console.log('[MovieScraper] Still on Cloudflare page, waiting much longer...');
+      await sleep(20000); // Wait another 20 seconds (total 35s)
+      
+      // Check again
+      const stillCloudflare = await page.evaluate(() => {
+        return document.title.includes('Just a moment');
+      });
+      
+      if (stillCloudflare) {
+        console.error('[MovieScraper] Cloudflare challenge did not complete');
+        throw new Error('Cloudflare protection blocking access');
+      }
     }
     
     console.log('[MovieScraper] Cloudflare check passed, proceeding with search...');
