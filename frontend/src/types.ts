@@ -11,6 +11,7 @@ export interface StreamState {
   lastTimeUpdate: number;
   users: User[];
   viewerCount: number;
+  movieTitle?: string;
 }
 
 export type VideoAction = 'play' | 'pause' | 'seek';

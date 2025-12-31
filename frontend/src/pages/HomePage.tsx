@@ -36,6 +36,7 @@ export function HomePage() {
 
     try {
       let finalUrl = videoUrl;
+      let title: string | undefined;
 
       // If movie name mode, fetch m3u8 URL first
       if (inputMode === "movie") {
@@ -61,9 +62,10 @@ export function HomePage() {
         }
 
         finalUrl = data.m3u8Url;
+        title = data.title;
       }
 
-      const response = await socketService.setVideo(finalUrl);
+      const response = await socketService.setVideo(finalUrl, title);
       if (response.error) {
         setError(response.error);
         setLoading(false);

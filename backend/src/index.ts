@@ -69,7 +69,7 @@ app.post('/api/search-movie', async (req, res) => {
     const result = await extractM3U8FromMovie(movieName);
     
     if (result.success && result.m3u8Url) {
-      return res.json({ success: true, m3u8Url: result.m3u8Url });
+      return res.json({ success: true, m3u8Url: result.m3u8Url, title: result.title });
     } else {
       return res.status(404).json({ success: false, error: result.error || 'Movie not found' });
     }

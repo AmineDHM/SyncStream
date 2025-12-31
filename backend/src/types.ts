@@ -10,6 +10,7 @@ export interface StreamState {
   isPlaying: boolean;
   lastTimeUpdate: number;
   users: Map<string, User>;
+  movieTitle?: string;
 }
 
 export interface StreamStateDTO {
@@ -20,6 +21,7 @@ export interface StreamStateDTO {
   lastTimeUpdate: number;
   users: User[];
   viewerCount: number;
+  movieTitle?: string;
 }
 
 export type VideoAction = 'play' | 'pause' | 'seek';

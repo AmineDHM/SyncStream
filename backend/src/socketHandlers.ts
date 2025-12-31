@@ -8,6 +8,7 @@ const STREAM_ROOM = 'stream';
 
 const setVideoSchema = z.object({
   videoUrl: z.string().url(),
+  movieTitle: z.string().optional(),
 });
 
 const joinSchema = z.object({});
@@ -42,11 +43,11 @@ export function setupSocketHandlers(io: Server): void {
     // Start stream with video
     socket.on('set-video', (data, callback) => {
       try {
-        const { videoUrl } = setVideoSchema.parse(data);
+        const { videoUrl, movieTitle } = setVideoSchema.parse(data);
         const userId = uuidv4();
         const user: User = { id: userId, socketId: socket.id };
 
-        streamManager.setVideo(videoUrl, user);
+        streamManager.setVideo(videoUrl, user, movieTitle);
         socket.join(STREAM_ROOM);
         broadcastState();
 

@@ -361,6 +361,15 @@ export function WatchPage() {
       {/* Video */}
       <main className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-5xl">
+          {/* Movie Title */}
+          {stream.movieTitle && (
+            <div className="mb-4">
+              <h2 className="text-2xl font-bold text-white text-center">
+                {stream.movieTitle}
+              </h2>
+            </div>
+          )}
+          
           <VideoPlayer
             setVideoRef={setVideoRef}
             isPlaying={isPlaying}

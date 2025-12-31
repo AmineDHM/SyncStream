@@ -8,6 +8,7 @@ class StreamManager {
     isPlaying: false,
     lastTimeUpdate: Date.now(),
     users: new Map(),
+    movieTitle: undefined,
   };
 
   getState(): StreamState {
@@ -18,13 +19,14 @@ class StreamManager {
     return this.stream.videoUrl !== '';
   }
 
-  setVideo(videoUrl: string, user: User): StreamState {
+  setVideo(videoUrl: string, user: User, movieTitle?: string): StreamState {
     this.stream.videoUrl = videoUrl;
     this.stream.currentTime = 0;
     this.stream.duration = 0;
     this.stream.isPlaying = false;
     this.stream.lastTimeUpdate = Date.now();
     this.stream.users.set(user.id, user);
+    this.stream.movieTitle = movieTitle;
     return this.stream;
   }
 
@@ -41,6 +43,7 @@ class StreamManager {
       this.stream.currentTime = 0;
       this.stream.duration = 0;
       this.stream.isPlaying = false;
+      this.stream.movieTitle = undefined;
     }
   }
 
@@ -79,6 +82,7 @@ class StreamManager {
       lastTimeUpdate: this.stream.lastTimeUpdate,
       users: Array.from(this.stream.users.values()),
       viewerCount: this.stream.users.size,
+      movieTitle: this.stream.movieTitle,
     };
   }
 }

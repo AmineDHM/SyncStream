@@ -15,9 +15,11 @@
   "keywords": ["syncstream", "video", "socket.io", "hls"],
   "license": "MIT",
   "dependencies": {
+    "@sparticuz/chromium": "^130.0.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "puppeteer": "^24.34.0",
+    "puppeteer-core": "^23.9.0",
     "socket.io": "^4.7.2",
     "uuid": "^9.0.1",
     "zod": "^3.22.4"

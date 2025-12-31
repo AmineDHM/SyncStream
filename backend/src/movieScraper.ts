@@ -1,9 +1,12 @@
 // @ts-nocheck
+import puppeteerCore from "puppeteer-core";
 import puppeteer from "puppeteer";
+import chromium from "@sparticuz/chromium";
 
 interface ScraperResult {
   success: boolean;
   m3u8Url?: string;
+  title?: string;
   error?: string;
 }
 
@@ -17,14 +20,32 @@ export async function extractM3U8FromMovie(
   let browser;
 
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-blink-features=AutomationControlled",
-      ],
-    });
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // Use @sparticuz/chromium for serverless environments, puppeteer for local
+    if (isProduction) {
+      browser = await puppeteerCore.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+      });
+    } else {
+      // For local development, try to find Chrome/Chromium
+      const executablePath = 
+        process.env.PUPPETEER_EXECUTABLE_PATH ||
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"; // Default Windows path
+      
+      browser = await puppeteer.launch({
+        headless: true,
+        executablePath,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-blink-features=AutomationControlled",
+        ],
+      });
+    }
 
     const page = await browser.newPage();
 
@@ -84,6 +105,41 @@ export async function extractM3U8FromMovie(
     });
 
     await sleep(3000);
+
+    // Extract movie title
+    // @ts-ignore
+    const rawTitle = await page.evaluate(() => {
+      // Try to get title from h1 or page title
+      const h1 = document.querySelector("h1");
+      if (h1 && h1.textContent) {
+        return h1.textContent.trim();
+      }
+      // Fallback to page title
+      return document.title.split("|")[0].trim();
+    });
+
+    // Parse the title to extract just the movie name
+    // Remove Arabic text, year, and extra text - keep only the movie name
+    let movieTitle = rawTitle;
+    
+    // Remove common Arabic phrases and patterns
+    movieTitle = movieTitle
+      .replace(/فيلم/g, "") // Remove "فيلم"
+      .replace(/مترجم.*$/g, "") // Remove "مترجم" and everything after
+      .replace(/اون لاين/g, "") // Remove "اون لاين"
+      .replace(/فاصل إعلاني/g, "") // Remove "فاصل إعلاني"
+      .replace(/\d{4}/g, "") // Remove year (4 digits)
+      .replace(/\s+-\s+/g, " ") // Clean up dashes
+      .replace(/\s+/g, " ") // Clean up multiple spaces
+      .trim();
+    
+    // If still has Arabic characters, try to extract English text only
+    if (/[\u0600-\u06FF]/.test(movieTitle)) {
+      const englishMatch = movieTitle.match(/[A-Za-z0-9\s:'-]+/g);
+      if (englishMatch) {
+        movieTitle = englishMatch.join(" ").trim();
+      }
+    }
 
     await page.evaluate(() => {
       const elements = Array.from(document.querySelectorAll("a, button, li"));
@@ -180,7 +236,7 @@ export async function extractM3U8FromMovie(
 
     if (m3u8Links.length > 0) {
       const uniqueLinks = [...new Set(m3u8Links)];
-      return { success: true, m3u8Url: uniqueLinks[0] };
+      return { success: true, m3u8Url: uniqueLinks[0], title: movieTitle };
     }
 
     return { success: false, error: "No M3U8 link found" };

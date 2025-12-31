@@ -65,14 +65,14 @@ class SocketService {
   }
 
   // Start stream with video
-  setVideo(videoUrl: string): Promise<{ success?: boolean; error?: string; userId?: string; state?: StreamState }> {
+  setVideo(videoUrl: string, movieTitle?: string): Promise<{ success?: boolean; error?: string; userId?: string; state?: StreamState }> {
     return new Promise((resolve, reject) => {
       if (!this.socket?.connected) {
         reject(new Error('Not connected'));
         return;
       }
       const timeout = setTimeout(() => reject(new Error('Timeout')), 10000);
-      this.socket.emit('set-video', { videoUrl }, (response: { success?: boolean; error?: string; userId?: string; state?: StreamState }) => {
+      this.socket.emit('set-video', { videoUrl, movieTitle }, (response: { success?: boolean; error?: string; userId?: string; state?: StreamState }) => {
         clearTimeout(timeout);
         resolve(response);
       });
