@@ -2,6 +2,8 @@
 import puppeteerCore from "puppeteer-core";
 import puppeteerVanilla from "puppeteer";
 import chromium from "@sparticuz/chromium";
+import axios from "axios";
+import * as cheerio from "cheerio";
 
 interface ScraperResult {
   success: boolean;
@@ -66,22 +68,138 @@ async function waitForCloudflareBypass(
   return false;
 }
 
+/**
+ * Fast HTTP-based scraper using cookies (for production)
+ * This bypasses Puppeteer entirely when cookies are available
+ */
+async function extractWithHTTP(
+  movieName: string,
+  cloudfareCookie: string
+): Promise<ScraperResult> {
+  try {
+    console.log("[MovieScraper-HTTP] Using fast HTTP method with cookies");
+
+    const headers = {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Accept":
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Cookie": cloudfareCookie,
+      "Referer": "https://www.faselhds.biz/",
+      "DNT": "1",
+      "Connection": "keep-alive",
+      "Upgrade-Insecure-Requests": "1",
+    };
+
+    // Step 1: Search for movie
+    console.log("[MovieScraper-HTTP] Searching for:", movieName);
+    const searchResponse = await axios.post(
+      "https://www.faselhds.biz/wp-admin/admin-ajax.php",
+      new URLSearchParams({
+        action: "dtc_live",
+        trsearch: movieName,
+      }),
+      {
+        headers: {
+          ...headers,
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        timeout: 15000,
+      }
+    );
+
+    const $ = cheerio.load(searchResponse.data);
+    const firstLink = $("a").first().attr("href");
+
+    if (!firstLink) {
+      return { success: false, error: "Movie not found" };
+    }
+
+    console.log("[MovieScraper-HTTP] Found movie link:", firstLink);
+
+    // Step 2: Get movie page
+    const moviePageResponse = await axios.get(firstLink, {
+      headers,
+      timeout: 15000,
+    });
+
+    const $movie = cheerio.load(moviePageResponse.data);
+
+    // Extract title
+    let movieTitle =
+      $movie("h1").first().text().trim() ||
+      $movie("title").text().split("|")[0].trim();
+
+    movieTitle = movieTitle
+      .replace(/فيلم/g, "")
+      .replace(/مترجم.*$/g, "")
+      .replace(/اون لاين/g, "")
+      .replace(/\d{4}/g, "")
+      .replace(/\s+-\s+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (/[\u0600-\u06FF]/.test(movieTitle)) {
+      const englishMatch = movieTitle.match(/[A-Za-z0-9\s:'-]+/g);
+      if (englishMatch) {
+        movieTitle = englishMatch.join(" ").trim();
+      }
+    }
+
+    console.log("[MovieScraper-HTTP] Extracted title:", movieTitle);
+
+    // Extract M3U8 links from page HTML
+    const m3u8Regex = /(https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/gi;
+    const htmlContent = moviePageResponse.data;
+    const m3u8Matches = htmlContent.match(m3u8Regex);
+
+    if (m3u8Matches && m3u8Matches.length > 0) {
+      const uniqueLinks = [...new Set(m3u8Matches)];
+      console.log(
+        "[MovieScraper-HTTP] Found M3U8 links:",
+        uniqueLinks.length
+      );
+      return { success: true, m3u8Url: uniqueLinks[0], title: movieTitle };
+    }
+
+    return { success: false, error: "No M3U8 link found in movie page" };
+  } catch (error) {
+    console.error("[MovieScraper-HTTP] Error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return {
+      success: false,
+      error: `HTTP method failed: ${errorMessage}`,
+    };
+  }
+}
+
 export async function extractM3U8FromMovie(
   movieName: string
 ): Promise<ScraperResult> {
+  const isProduction = process.env.NODE_ENV === "production";
+  console.log(`[MovieScraper] Starting search for: ${movieName}`);
+  console.log(
+    `[MovieScraper] Environment: ${isProduction ? "production" : "development"}`
+  );
+
+  // Use cookie from environment variable
+  const cloudfareCookie = process.env.CLOUDFLARE_COOKIE;
+
+  // If cookies are available, use the fast HTTP method (no Puppeteer!)
+  if (cloudfareCookie) {
+    console.log("[MovieScraper] Using fast HTTP method (cookies available)");
+    return await extractWithHTTP(movieName, cloudfareCookie);
+  }
+
+  // Fallback to Puppeteer (for local development without cookies)
+  console.log("[MovieScraper] Using Puppeteer method (no cookies)");
   let browser;
 
   try {
-    const isProduction = process.env.NODE_ENV === "production";
-    console.log(`[MovieScraper] Starting search for: ${movieName}`);
-    console.log(
-      `[MovieScraper] Environment: ${
-        isProduction ? "production" : "development"
-      }`
-    );
-
-    // Use cookie from environment variable or parameter
-    const cloudfareCookie = process.env.CLOUDFLARE_COOKIE;
 
     if (isProduction) {
       // Simplified production config - removed problematic flags
