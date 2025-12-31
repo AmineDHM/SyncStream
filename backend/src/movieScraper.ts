@@ -69,8 +69,8 @@ export async function extractM3U8FromMovie(
     
     try {
       await page.goto("https://www.faselhds.biz/", {
-        waitUntil: "domcontentloaded", // Changed from networkidle2
-        timeout: 60000, // Increased timeout to 60 seconds
+        waitUntil: "domcontentloaded",
+        timeout: 60000,
       });
       console.log('[MovieScraper] Page loaded successfully');
     } catch (error) {
@@ -78,8 +78,22 @@ export async function extractM3U8FromMovie(
       throw new Error('Failed to load website - possible Cloudflare block');
     }
 
-    // Wait longer for Cloudflare challenge
+    // Wait for Cloudflare challenge to complete
+    console.log('[MovieScraper] Waiting for Cloudflare challenge...');
     await sleep(10000);
+    
+    // Check if still on Cloudflare challenge page
+    const isCloudflare = await page.evaluate(() => {
+      return document.title.includes('Just a moment') || 
+             document.body.innerText.includes('Checking your browser');
+    });
+    
+    if (isCloudflare) {
+      console.log('[MovieScraper] Still on Cloudflare page, waiting longer...');
+      await sleep(15000); // Wait another 15 seconds
+    }
+    
+    console.log('[MovieScraper] Cloudflare check passed, proceeding with search...');
 
     const searchResponse = await page.evaluate(
       async (searchQuery: string) => {
