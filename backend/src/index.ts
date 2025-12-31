@@ -66,7 +66,9 @@ app.post('/api/search-movie', async (req, res) => {
       return res.status(400).json({ error: 'Movie name is required' });
     }
 
+    console.log(`[API] Searching for movie: ${movieName}`);
     const result = await extractM3U8FromMovie(movieName);
+    console.log(`[API] Search result:`, { success: result.success, hasUrl: !!result.m3u8Url, error: result.error });
     
     if (result.success && result.m3u8Url) {
       return res.json({ success: true, m3u8Url: result.m3u8Url, title: result.title });

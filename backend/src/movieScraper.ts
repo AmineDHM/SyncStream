@@ -21,6 +21,8 @@ export async function extractM3U8FromMovie(
 
   try {
     const isProduction = process.env.NODE_ENV === "production";
+    console.log(`[MovieScraper] Starting search for: ${movieName}`);
+    console.log(`[MovieScraper] Environment: ${isProduction ? 'production' : 'development'}`);
 
     // Use @sparticuz/chromium for serverless environments, puppeteer for local
     if (isProduction) {
@@ -47,6 +49,7 @@ export async function extractM3U8FromMovie(
       });
     }
 
+    console.log('[MovieScraper] Browser launched successfully');
     const page = await browser.newPage();
 
     await page.setUserAgent(
@@ -95,7 +98,10 @@ export async function extractM3U8FromMovie(
       return firstLink ? firstLink.href : null;
     }, searchResponse);
 
+    console.log('[MovieScraper] Search result link:', linkHref);
+
     if (!linkHref) {
+      console.log('[MovieScraper] No link found in search results');
       return { success: false, error: "Movie not found" };
     }
 
@@ -241,9 +247,12 @@ export async function extractM3U8FromMovie(
 
     return { success: false, error: "No M3U8 link found" };
   } catch (error) {
+    console.error('[MovieScraper] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error('[MovieScraper] Error message:', errorMessage);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: errorMessage,
     };
   } finally {
     if (browser) {
