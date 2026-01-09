@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Loader2, AlertCircle, Users } from 'lucide-react';
+import { LogOut, Loader2, AlertCircle, Heart } from 'lucide-react';
 import { socketService } from '../services/socket';
 import { VideoPlayer } from '../components/VideoPlayer';
 import { StreamState, VideoEvent, ReactionType, ReactionEvent } from '../types';
@@ -319,21 +319,28 @@ export function WatchPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-dark-900 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+      <div className="min-h-screen bg-gradient-to-br from-dark-900 via-dark-900 to-romantic-950 flex items-center justify-center">
+        <div className="relative">
+          <Loader2 className="w-12 h-12 text-romantic-500 animate-spin" />
+          <div className="absolute inset-0 bg-romantic-500/30 blur-xl rounded-full animate-pulse" />
+        </div>
       </div>
     );
   }
 
   if (error || !stream) {
     return (
-      <div className="min-h-screen bg-dark-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-dark-900 via-dark-900 to-romantic-950 flex items-center justify-center p-4">
         <div className="text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Stream Ended</h2>
-          <p className="text-dark-400 mb-6">{error || 'No active stream'}</p>
-          <button onClick={() => navigate('/')} className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-xl">
-            Go Home
+          <div className="relative inline-block mb-4">
+            <AlertCircle className="w-16 h-16 text-romantic-400 mx-auto" />
+            <div className="absolute inset-0 bg-romantic-500/20 blur-xl rounded-full" />
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Date Night Ended</h2>
+          <p className="text-romantic-300/60 mb-6">{error || 'No active stream'}</p>
+          <button onClick={() => navigate('/')} className="bg-gradient-to-r from-romantic-600 to-pink-600 hover:from-romantic-700 hover:to-pink-700 text-white py-3 px-6 rounded-xl shadow-lg shadow-romantic-500/25 transition-all hover:scale-105">
+            <Heart className="w-4 h-4 inline mr-2" />
+            Return Home
           </button>
         </div>
       </div>
@@ -341,17 +348,29 @@ export function WatchPage() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-dark-900 flex flex-col">
+    <div className="h-screen overflow-hidden bg-gradient-to-br from-romantic-950 via-dark-900 to-pink-950 flex flex-col relative">
+      {/* Subtle Animated Background for Watch Page */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 -left-20 w-[300px] h-[300px] bg-romantic-600/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-0 -right-20 w-[250px] h-[250px] bg-pink-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
+        {/* Subtle floating hearts for watch page */}
+        <div className="floating-heart floating-heart-2 text-xl opacity-30" style={{ left: '5%', animationDelay: '0s' }}>💕</div>
+        <div className="floating-heart floating-heart-4 text-lg opacity-30" style={{ left: '95%', animationDelay: '5s' }}>❤️</div>
+      </div>
+
       {/* Header */}
-      <header className="border-b border-dark-800 px-4 py-3 flex-shrink-0">
+      <header className="border-b border-romantic-700/20 px-4 py-3 flex-shrink-0 backdrop-blur-md bg-dark-900/70 relative z-10">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-bold text-white">SyncStream</h1>
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="SyncWithYou" className="w-8 h-8 object-contain animate-pulse-glow" />
+            <h1 className="text-xl font-bold bg-gradient-to-r from-romantic-300 to-pink-300 bg-clip-text text-transparent">SyncWithYou</h1>
+          </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-dark-400">
-              <Users className="w-4 h-4" />
-              <span className="text-sm">{stream.viewerCount} watching</span>
+            <div className="flex items-center gap-2 text-romantic-200/80">
+              <Heart className="w-4 h-4 fill-romantic-500 text-romantic-500 animate-pulse" />
+              <span className="text-sm">{stream.viewerCount} watching together</span>
             </div>
-            <button onClick={handleLeave} className="text-dark-400 hover:text-white">
+            <button onClick={handleLeave} className="text-romantic-300/50 hover:text-romantic-300 transition-colors" title="Leave stream">
               <LogOut className="w-5 h-5" />
             </button>
           </div>
@@ -359,7 +378,7 @@ export function WatchPage() {
       </header>
 
       {/* Video */}
-      <main className="flex-1 flex flex-col min-h-0 p-2 sm:p-4 relative">
+      <main className="flex-1 flex flex-col min-h-0 p-2 sm:p-4 relative z-10">
         <div className="flex-1 flex flex-col justify-center items-center max-w-5xl mx-auto w-full">
           {/* Movie Title */}
           {stream.movieTitle && (
@@ -369,7 +388,7 @@ export function WatchPage() {
               </h2>
             </div>
           )}
-          
+
           <VideoPlayer
             setVideoRef={setVideoRef}
             isPlaying={isPlaying}
